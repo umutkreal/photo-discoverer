@@ -8,6 +8,7 @@ Value: google.oauth2.credentials.Credentials nesnesi
 """
 
 _store: dict = {}
+_page_tokens: dict = {}
 
 
 def kaydet(email: str, credentials) -> None:
@@ -20,3 +21,15 @@ def getir(email: str):
 
 def sil(email: str) -> None:
     _store.pop(email, None)
+
+
+# ─── Sync page token yönetimi ───
+
+def page_token_kaydet(email: str, token: str) -> None:
+    """Google Drive Changes API page token'ını saklar."""
+    _page_tokens[email] = token
+
+
+def page_token_getir(email: str) -> str | None:
+    """Kaydedilmiş page token'ı döner. Yoksa None."""
+    return _page_tokens.get(email)
