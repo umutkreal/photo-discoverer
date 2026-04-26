@@ -6,3 +6,6 @@ torch
 Pillow
 qdrant-client
 python-dotenv
+fastapi
+uvicorn
+python-jose[cryptography]
