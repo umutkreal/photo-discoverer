@@ -1,9 +1,13 @@
-from fastapi import FastAPI, Request, Depends, Query
+from fastapi import FastAPI, HTTPException, Request, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse, StreamingResponse
 from dotenv import load_dotenv
 from pydantic import BaseModel
 from typing import Optional
+from googleapiclient.http import MediaIoBaseDownload
 import hashlib
+import httpx
+import io
 
 from auth import oauth_flow_init, oauth_flow_fetch_token, get_user_info
 from jwt_handler import jwt_olustur
@@ -21,7 +25,7 @@ app = FastAPI(title="Photo Discovery API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8000"],
+    allow_origins=["http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -78,12 +82,14 @@ def callback(request: Request):
         }
     )
 
-    return {
-        "user": user,
-        "access_token": token,
-        "token_type": "bearer",
-    }
-
+    frontend_url = "http://localhost:3000/auth/callback"
+    params = (
+        f"?access_token={token}"
+        f"&email={user['email']}"
+        f"&name={user.get('name', '')}"
+        f"&picture={user.get('picture', '')}"
+    )
+    return RedirectResponse(url=frontend_url + params)
 
 @app.get("/auth/me")
 def me(user: dict = Depends(aktif_kullanici)):
@@ -225,3 +231,25 @@ def search_photos(
         "has_more": (offset + limit) < total_points,
         "query": q,
     }
+@app.get("/thumbnail/{file_id}")
+def thumbnail(file_id: str, token: str = Query(...), ):
+    from jwt_handler import jwt_dogrula
+    from token_store import getir as credentials_getir
+    
+    payload = jwt_dogrula(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Geçersiz token")
+    
+    creds = credentials_getir(payload["email"])
+    if not creds:
+        raise HTTPException(status_code=401, detail="Oturum bulunamadı")
+    
+    drive_service = drive_servisi_olustur(creds)
+    request_obj = drive_service.files().get_media(fileId=file_id)
+    buffer = io.BytesIO()
+    downloader = MediaIoBaseDownload(buffer, request_obj)
+    done = False
+    while not done:
+        _, done = downloader.next_chunk()
+    buffer.seek(0)
+    return StreamingResponse(buffer, media_type="image/jpeg")
