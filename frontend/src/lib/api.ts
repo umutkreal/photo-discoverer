@@ -32,8 +32,9 @@ async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
 
 // ─── Auth ───
 export const authApi = {
-  login: () => request<{ auth_url: string }>("/auth/login"),
-  me: () => request<{ logged_in_user: { email: string; name: string; picture: string } }>("/auth/me"),
+  login:        () => request<{ auth_url: string }>("/auth/login"),
+  me:           () => request<{ logged_in_user: { email: string; name: string; picture: string } }>("/auth/me"),
+  dropboxLogin: () => request<{ auth_url: string }>("/auth/dropbox/login"),
 };
 
 // ─── Index ───
@@ -46,7 +47,7 @@ export interface IndexResult {
   collection: string;
   indexed: number;
   total_found: number;
-  errors: { file: string; error: string }[] | null;
+  errors: { source?: string; file: string; error: string }[] | null;
 }
 export const indexApi = {
   start: (body: IndexRequest) =>
@@ -59,19 +60,24 @@ export interface SyncResult {
   synced: boolean;
   added?: number;
   deleted?: number;
-  errors?: { file: string; error: string }[] | null;
+  errors?: { source?: string; file?: string; action?: string; error: string }[] | null;
 }
 export const syncApi = {
   run: () => request<SyncResult>("/sync", { method: "POST" }),
 };
 
 // ─── Search ───
+export type SourceKey = "gdrive" | "dropbox" | "pcloud" | "onedrive";
+
 export interface PhotoResult {
   filename: string;
   file_id: string;
   drive_url: string;
   thumbnail_url: string;
+  source: SourceKey;
+  folder_path: string;
   score: number;
+  file_size?: number;
 }
 export interface SearchResponse {
   results: PhotoResult[];
@@ -80,10 +86,66 @@ export interface SearchResponse {
   query: string;
 }
 export const searchApi = {
-  search: (q: string, limit = 12, offset = 0) =>
-    request<SearchResponse>(`/search?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}`),
+  search: (q: string, limit = 12, offset = 0, source?: SourceKey) => {
+    const params = new URLSearchParams({
+      q,
+      limit: String(limit),
+      offset: String(offset),
+    });
+    if (source) params.set("source", source);
+    return request<SearchResponse>(`/search?${params}`);
+  },
 };
-export function thumbnailUrl(file_id: string): string {
+
+export function thumbnailUrl(file_id: string, source: SourceKey = "gdrive"): string {
   const token = getToken();
-  return `${BASE_URL}/thumbnail/${file_id}?token=${token}`;
+  const params = new URLSearchParams({ file_id, source, token: token ?? "" });
+  return `${BASE_URL}/thumbnail?${params}`;
 }
+
+// ─── Integrations ───
+export interface ProviderStatus {
+  connected: boolean;
+  label: string;
+  disabled?: boolean;   // true → kod mevcut ama entegrasyon şimdilik kapalı
+}
+export type IntegrationsResponse = Record<SourceKey, ProviderStatus>;
+
+export const integrationApi = {
+  status: () => request<IntegrationsResponse>("/integrations"),
+  revoke: (source: SourceKey) =>
+    request<{ message: string; source: string }>(`/integrations/${source}`, { method: "DELETE" }),
+};
+
+// ─── Photos (delete, duplicates) ───
+export interface DuplicatePhoto {
+  file_id: string;
+  filename: string;
+  source: SourceKey;
+  drive_url: string;
+  file_size: number;
+  folder_path: string;
+  score: number;
+}
+export interface DuplicatesResponse {
+  groups: DuplicatePhoto[][];
+  total_groups: number;
+}
+
+export const photoApi = {
+  delete: (source: SourceKey, file_id: string) =>
+    request<{ deleted: boolean; cloud_deleted: boolean }>(
+      `/photos/${source}/${encodeURIComponent(file_id)}`,
+      { method: "DELETE" },
+    ),
+  duplicates: (threshold = 0.97, limit = 250) =>
+    request<DuplicatesResponse>(`/photos/duplicates?threshold=${threshold}&limit=${limit}`),
+};
+
+// ─── Source config (shared UI helpers) ───
+export const SOURCE_CONFIG: Record<SourceKey, { label: string; color: string; bg: string }> = {
+  gdrive:   { label: "Google Drive", color: "#4285F4", bg: "rgba(66,133,244,0.15)" },
+  dropbox:  { label: "Dropbox",      color: "#0061FF", bg: "rgba(0,97,255,0.15)"  },
+  pcloud:   { label: "pCloud",       color: "#20BFFF", bg: "rgba(32,191,255,0.15)" },
+  onedrive: { label: "OneDrive",     color: "#0078D4", bg: "rgba(0,120,212,0.15)" },
+};

@@ -45,6 +45,16 @@ export default function DashboardPage() {
     try {
       const result = await syncApi.run();
       setSyncState({ status: "success", data: result, message: result.message });
+      // Provider-level errors → toast on search page
+      if (result.errors && result.errors.length > 0) {
+        const sources = [...new Set(result.errors.map((e) => e.source).filter(Boolean))];
+        const msg = sources.length > 0
+          ? `${sources.join(", ")} bağlantısı senkronizasyon sırasında hata verdi. Entegrasyonlar sayfasından yeniden bağlanmayı deneyin.`
+          : "Bazı sağlayıcılarda senkronizasyon hatası oluştu.";
+        localStorage.setItem("last_sync_warning", msg);
+      } else {
+        localStorage.removeItem("last_sync_warning");
+      }
     } catch (e: unknown) {
       setSyncState({ status: "error", message: e instanceof Error ? e.message : "Hata oluştu" });
     }

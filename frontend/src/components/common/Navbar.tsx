@@ -11,6 +11,8 @@ export default function Navbar() {
   const navLinks = [
     { href: "/dashboard", label: "Panel" },
     { href: "/search", label: "Ara" },
+    { href: "/duplicates", label: "Yinelenenler" },
+    { href: "/settings/integrations", label: "Entegrasyonlar" },
   ];
 
   return (
