@@ -2,6 +2,7 @@ import dropbox
 import dropbox.files
 from PIL import Image
 import io
+import os
 from .base import BaseProvider
 
 
@@ -9,8 +10,23 @@ class DropboxProvider(BaseProvider):
 
     source_key = "dropbox"
 
-    def __init__(self, access_token: str):
-        self.dbx = dropbox.Dropbox(access_token)
+    def __init__(self, credentials):
+        if isinstance(credentials, dict):
+            # Yeni format: {"access_token": "...", "refresh_token": "..."}
+            # refresh_token varsa SDK otomatik yeniler, yoksa sadece access_token ile devam eder.
+            refresh_token = credentials.get("refresh_token")
+            if refresh_token:
+                self.dbx = dropbox.Dropbox(
+                    oauth2_access_token=credentials["access_token"],
+                    oauth2_refresh_token=refresh_token,
+                    app_key=os.getenv("DROPBOX_APP_KEY"),
+                    app_secret=os.getenv("DROPBOX_APP_SECRET"),
+                )
+            else:
+                self.dbx = dropbox.Dropbox(credentials["access_token"])
+        else:
+            # Eski format: düz string access_token (geriye dönük uyum)
+            self.dbx = dropbox.Dropbox(credentials)
 
     def fotograflari_listele(self, klasor_id=None, limit=100):
         yol = klasor_id or ""
