@@ -1,164 +1,119 @@
 """
-Senkronizasyon modülü — Google Drive Changes API ile delta sync.
+Senkronizasyon modülü — tüm provider'lar için delta sync.
 
-İlk çalıştırmada: tüm fotoğrafları indexle, page token kaydet.
-Sonraki çalıştırmalarda: sadece değişenleri işle (eklenen/silinen/güncellenen).
+İlk çalıştırmada: tüm fotoğrafları indexle, her provider için page token kaydet.
+Sonraki çalıştırmalarda: sadece değişenleri işle (eklenen/silinen).
 """
 
-from drive import drive_servisi_olustur, fotograflari_listele, foto_indir
+from providers.factory import provider_getir
 from embedding import foto_vektore_cevir
 from qdrant_db import collection_olustur, fotograf_kaydet, toplu_fotograf_sil
 from token_store import page_token_kaydet, page_token_getir
 
 
-def baslangic_token_al(drive_service) -> str:
-    """Google Drive'dan ilk page token'ı alır."""
-    response = drive_service.changes().getStartPageToken().execute()
-    return response.get("startPageToken")
-
-
-def degisiklikleri_getir(drive_service, page_token: str) -> dict:
+def index_all(qdrant_client, col_name, email, all_credentials: dict, limit=500, folder_id=None):
     """
-    Son sync'ten bu yana olan değişiklikleri getirir.
-    Returns: {
-        "eklenenler": [{"id": "...", "name": "..."}],
-        "silinenler": ["file_id_1", "file_id_2"],
-        "yeni_token": "..."
-    }
-    """
-    eklenenler = []
-    silinenler = []
-    new_start_token = page_token
-
-    while True:
-        response = drive_service.changes().list(
-            pageToken=page_token,
-            fields="nextPageToken, newStartPageToken, changes(fileId, removed, file(id, name, mimeType, trashed))",
-            spaces="drive",
-            includeRemoved=True,
-        ).execute()
-
-        for change in response.get("changes", []):
-            file_id = change.get("fileId")
-            removed = change.get("removed", False)
-            file_info = change.get("file")
-
-            if removed:
-                silinenler.append(file_id)
-                continue
-
-            if file_info is None:
-                continue
-
-            mime_type = file_info.get("mimeType", "")
-            trashed = file_info.get("trashed", False)
-
-            if trashed:
-                silinenler.append(file_id)
-            elif mime_type.startswith("image/"):
-                eklenenler.append({
-                    "id": file_info["id"],
-                    "name": file_info["name"],
-                })
-
-        # Sonraki sayfa varsa devam et
-        if "nextPageToken" in response:
-            page_token = response["nextPageToken"]
-        else:
-            new_start_token = response.get("newStartPageToken", page_token)
-            break
-
-    return {
-        "eklenenler": eklenenler,
-        "silinenler": silinenler,
-        "yeni_token": new_start_token,
-    }
-
-
-def index_all(drive_service, qdrant_client, col_name, email, limit=500, folder_id=None):
-    """
-    İlk seferki tam indexleme.
-    Tüm fotoğrafları indexler ve page token kaydeder.
+    Tam indexleme — tüm bağlı provider'ları sıfırdan indexler.
+    all_credentials: {source: credentials} dict — token_store.getir_tum() çıktısı.
     """
     collection_olustur(qdrant_client, col_name, 512)
 
-    fotolar = fotograflari_listele(drive_service, klasor_id=folder_id, limit=limit)
+    total_indexed = 0
+    total_found = 0
+    all_errors = []
 
-    if not fotolar:
-        token = baslangic_token_al(drive_service)
-        page_token_kaydet(email, token)
-        return {"indexed": 0, "total_found": 0, "errors": None}
+    for source, creds in all_credentials.items():
+        print(f"\n📂 [{source}] indexleme başlıyor...")
+        provider = provider_getir(source, creds)
 
-    basarili = 0
-    hatalar = []
-
-    for foto in fotolar:
         try:
-            image = foto_indir(drive_service, foto["id"])
-            vektor = foto_vektore_cevir(image)
-            fotograf_kaydet(qdrant_client, col_name, vektor, foto)
-            basarili += 1
-            print(f"  ✅ [{basarili}/{len(fotolar)}] {foto['name']}")
+            fotolar = provider.fotograflari_listele(klasor_id=folder_id, limit=limit)
         except Exception as e:
-            hatalar.append({"file": foto["name"], "error": str(e)})
-            print(f"  ❌ {foto['name']}: {e}")
+            all_errors.append({"source": source, "error": f"Liste alınamadı: {e}"})
+            print(f"  ❌ [{source}] liste hatası: {e}")
+            continue
 
-    # Page token kaydet — sonraki sync bu noktadan devam edecek
-    token = baslangic_token_al(drive_service)
-    page_token_kaydet(email, token)
+        total_found += len(fotolar)
+
+        basarili = 0
+        for foto in fotolar:
+            try:
+                image = provider.foto_indir(foto["id"])
+                vektor = foto_vektore_cevir(image)
+                fotograf_kaydet(qdrant_client, col_name, vektor, foto, source)
+                basarili += 1
+                total_indexed += 1
+                print(f"  ✅ [{source}] [{basarili}/{len(fotolar)}] {foto['name']}")
+            except Exception as e:
+                all_errors.append({"source": source, "file": foto.get("name", "?"), "error": str(e)})
+                print(f"  ❌ [{source}] {foto.get('name', '?')}: {e}")
+
+        try:
+            token = provider.baslangic_token_al()
+            page_token_kaydet(email, source, token)
+        except Exception as e:
+            print(f"  ⚠️ [{source}] başlangıç token alınamadı: {e}")
 
     return {
-        "indexed": basarili,
-        "total_found": len(fotolar),
-        "errors": hatalar if hatalar else None,
+        "indexed":     total_indexed,
+        "total_found": total_found,
+        "errors":      all_errors if all_errors else None,
     }
 
 
-def delta_sync(drive_service, qdrant_client, col_name, email):
+def delta_sync(qdrant_client, col_name, email, all_credentials: dict):
     """
-    Sadece değişen fotoğrafları işler.
-    Yenileri ekler, silinenleri kaldırır.
+    Delta sync — her provider için sadece son sync'ten bu yana değişenleri işler.
+    Hiçbir provider için token yoksa None döner (henüz index yapılmamış demek).
     """
-    saved_token = page_token_getir(email)
+    added = 0
+    deleted = 0
+    all_errors = []
+    herhangi_token_var = False
 
-    if saved_token is None:
-        # Hiç sync yapılmamış — caller index_all çağıracak
+    for source, creds in all_credentials.items():
+        saved_token = page_token_getir(email, source)
+        if saved_token is None:
+            print(f"  ⚠️ [{source}] için kayıtlı token yok, atlanıyor.")
+            continue
+
+        herhangi_token_var = True
+        print(f"\n🔄 [{source}] delta sync başlıyor...")
+        provider = provider_getir(source, creds)
+
+        try:
+            eklenenler, silinenler, yeni_token = provider.degisiklikleri_getir(saved_token)
+        except Exception as e:
+            all_errors.append({"source": source, "error": f"Değişiklik alınamadı: {e}"})
+            print(f"  ❌ [{source}] değişiklik hatası: {e}")
+            continue
+
+        if silinenler:
+            try:
+                toplu_fotograf_sil(qdrant_client, col_name, silinenler)
+                deleted += len(silinenler)
+                print(f"  🗑️ [{source}] {len(silinenler)} fotoğraf silindi")
+            except Exception as e:
+                all_errors.append({"source": source, "action": "silme", "error": str(e)})
+
+        for foto in eklenenler:
+            try:
+                image = provider.foto_indir(foto["id"])
+                vektor = foto_vektore_cevir(image)
+                fotograf_kaydet(qdrant_client, col_name, vektor, foto, source)
+                added += 1
+                print(f"  ✅ [{source}] Yeni: {foto.get('name', foto['id'])}")
+            except Exception as e:
+                all_errors.append({"source": source, "file": foto.get("name", "?"), "error": str(e)})
+                print(f"  ❌ [{source}] {foto.get('name', '?')}: {e}")
+
+        page_token_kaydet(email, source, yeni_token)
+
+    if not herhangi_token_var:
         return None
 
-    # Değişiklikleri getir
-    changes = degisiklikleri_getir(drive_service, saved_token)
-
-    eklenen_sayisi = 0
-    silinen_sayisi = 0
-    hatalar = []
-
-    # Silinenleri Qdrant'tan kaldır
-    if changes["silinenler"]:
-        try:
-            toplu_fotograf_sil(qdrant_client, col_name, changes["silinenler"])
-            silinen_sayisi = len(changes["silinenler"])
-            print(f"  🗑️ {silinen_sayisi} fotoğraf Qdrant'tan silindi")
-        except Exception as e:
-            hatalar.append({"action": "silme", "error": str(e)})
-            print(f"  ❌ Silme hatası: {e}")
-
-    # Yenileri indexle
-    for foto in changes["eklenenler"]:
-        try:
-            image = foto_indir(drive_service, foto["id"])
-            vektor = foto_vektore_cevir(image)
-            fotograf_kaydet(qdrant_client, col_name, vektor, foto)
-            eklenen_sayisi += 1
-            print(f"  ✅ Yeni: {foto['name']}")
-        except Exception as e:
-            hatalar.append({"file": foto["name"], "error": str(e)})
-            print(f"  ❌ {foto['name']}: {e}")
-
-    # Yeni page token'ı kaydet
-    page_token_kaydet(email, changes["yeni_token"])
-
     return {
-        "added": eklenen_sayisi,
-        "deleted": silinen_sayisi,
-        "errors": hatalar if hatalar else None,
+        "added":   added,
+        "deleted": deleted,
+        "errors":  all_errors if all_errors else None,
     }

@@ -1,5 +1,5 @@
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams, PointStruct, FilterSelector, Filter, FieldCondition, MatchValue
+from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
 import os
 import hashlib
 
@@ -26,18 +26,17 @@ def collection_olustur(client, collection_name, vector_size):
 
 def file_id_to_point_id(file_id: str) -> int:
     """
-    Google Drive file_id'den deterministik Qdrant point ID üretir.
-    Aynı file_id her zaman aynı ID'yi verir.
-    Böylece sync sırasında silme/güncelleme yapabiliriz.
+    file_id'den deterministik Qdrant point ID üretir.
+    Aynı file_id her zaman aynı ID'yi verir — sync sırasında silme/güncelleme için.
     """
     hash_bytes = hashlib.md5(file_id.encode()).digest()
-    # İlk 8 byte'ı unsigned 64-bit integer'a çevir
     return int.from_bytes(hash_bytes[:8], byteorder="big")
 
 
-def fotograf_kaydet(client, collection_name, vektor, foto):
-    """Fotoğrafı Qdrant'a kaydeder. ID, file_id'den türetilir."""
+def fotograf_kaydet(client, collection_name, vektor, foto: dict, source: str = "gdrive"):
+    """Fotoğrafı Qdrant'a kaydeder. source alanı hangi cloud'dan geldiğini belirtir."""
     point_id = file_id_to_point_id(foto["id"])
+    fallback_url = f"https://drive.google.com/file/d/{foto['id']}/view" if source == "gdrive" else ""
     client.upsert(
         collection_name=collection_name,
         points=[
@@ -45,9 +44,12 @@ def fotograf_kaydet(client, collection_name, vektor, foto):
                 id=point_id,
                 vector=vektor,
                 payload={
-                    "filename": foto["name"],
-                    "file_id": foto["id"],
-                    "drive_url": f"https://drive.google.com/file/d/{foto['id']}/view",
+                    "filename":    foto["name"],
+                    "file_id":     foto["id"],
+                    "drive_url":   foto.get("drive_url", fallback_url),
+                    "source":      source,
+                    "folder_path": foto.get("folder_path", ""),
+                    "file_size":   foto.get("size", 0),
                 },
             )
         ],
@@ -55,7 +57,6 @@ def fotograf_kaydet(client, collection_name, vektor, foto):
 
 
 def fotograf_sil(client, collection_name, file_id: str):
-    """Belirli bir fotoğrafı Qdrant'tan siler (file_id ile)."""
     point_id = file_id_to_point_id(file_id)
     client.delete(
         collection_name=collection_name,
@@ -63,8 +64,73 @@ def fotograf_sil(client, collection_name, file_id: str):
     )
 
 
+def duplikatlari_bul(client, collection_name: str, threshold: float = 0.97, limit: int = 300) -> list:
+    """
+    Yüksek cosine benzerliğine sahip fotoğraf gruplarını döner (potansiyel yinelemeler).
+    Her grup en az 2 üye içerir. O(n) sorgu — limit ile kısıtla.
+    """
+    try:
+        records, _ = client.scroll(
+            collection_name=collection_name,
+            limit=limit,
+            with_vectors=True,
+            with_payload=True,
+        )
+    except Exception:
+        return []
+
+    visited: set = set()
+    groups = []
+
+    for record in records:
+        if record.id in visited:
+            continue
+
+        try:
+            hits = client.search(
+                collection_name=collection_name,
+                query_vector=record.vector,
+                limit=10,
+                score_threshold=threshold,
+            )
+        except Exception:
+            visited.add(record.id)
+            continue
+
+        members = []
+        for hit in hits:
+            p = hit.payload or {}
+            if hit.id == record.id:
+                members.insert(0, {
+                    "file_id":     record.payload.get("file_id", str(record.id)),
+                    "filename":    record.payload.get("filename", ""),
+                    "source":      record.payload.get("source", "gdrive"),
+                    "drive_url":   record.payload.get("drive_url", ""),
+                    "file_size":   record.payload.get("file_size", 0),
+                    "folder_path": record.payload.get("folder_path", ""),
+                    "score":       1.0,
+                })
+            elif hit.id not in visited:
+                members.append({
+                    "file_id":     p.get("file_id", str(hit.id)),
+                    "filename":    p.get("filename", ""),
+                    "source":      p.get("source", "gdrive"),
+                    "drive_url":   p.get("drive_url", ""),
+                    "file_size":   p.get("file_size", 0),
+                    "folder_path": p.get("folder_path", ""),
+                    "score":       round(hit.score, 4),
+                })
+                visited.add(hit.id)
+
+        if len(members) >= 2:
+            groups.append(members)
+
+        visited.add(record.id)
+
+    return groups
+
+
 def toplu_fotograf_sil(client, collection_name, file_ids: list[str]):
-    """Birden fazla fotoğrafı tek seferde siler."""
     if not file_ids:
         return
     point_ids = [file_id_to_point_id(fid) for fid in file_ids]

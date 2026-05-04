@@ -4,20 +4,26 @@ from fastapi.responses import RedirectResponse, StreamingResponse
 from dotenv import load_dotenv
 from pydantic import BaseModel
 from typing import Optional
-from googleapiclient.http import MediaIoBaseDownload
 import hashlib
-import httpx
 import io
+import os
+import secrets
+import httpx as _httpx
 
 from auth import oauth_flow_init, oauth_flow_fetch_token, get_user_info
 from jwt_handler import jwt_olustur
-from token_store import kaydet as credentials_kaydet
-from token_store import page_token_kaydet, page_token_getir
-from dependencies import aktif_kullanici, kullanici_credentials
-from drive import drive_servisi_olustur, fotograflari_listele, foto_indir
-from embedding import foto_vektore_cevir, metin_vektore_cevir
-from qdrant_db import qdrant_baglanti, collection_olustur, fotograf_kaydet, toplu_fotograf_sil
-from sync import index_all, delta_sync, baslangic_token_al, degisiklikleri_getir
+from token_store import (
+    kaydet as credentials_kaydet,
+    getir as credentials_getir,
+    getir_tum as credentials_getir_tum,
+    sil as credentials_sil,
+    page_token_sil,
+)
+from dependencies import aktif_kullanici, kullanici_tum_credentials
+from embedding import metin_vektore_cevir
+from qdrant_db import qdrant_baglanti, collection_olustur, fotograf_sil, duplikatlari_bul
+from providers.factory import provider_getir
+from sync import index_all, delta_sync
 
 load_dotenv()
 
@@ -31,13 +37,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ─── Qdrant client (uygulama başladığında bir kez bağlan) ───
 qdrant_client = qdrant_baglanti()
 VECTOR_SIZE = 512
 
 
 def collection_adi(email: str) -> str:
-    """Her kullanıcıya özel collection adı üretir: photos_abc123..."""
     email_hash = hashlib.md5(email.encode()).hexdigest()[:12]
     return f"photos_{email_hash}"
 
@@ -57,7 +61,7 @@ def health():
 
 
 # ═══════════════════════════════════════════
-#  Auth
+#  Auth — Google Drive
 # ═══════════════════════════════════════════
 
 @app.get("/auth/login")
@@ -72,12 +76,12 @@ def callback(request: Request):
     credentials = oauth_flow_fetch_token(authorization_response)
     user = get_user_info(credentials)
 
-    credentials_kaydet(user["email"], credentials)
+    credentials_kaydet(user["email"], "gdrive", credentials)
 
     token = jwt_olustur(
         {
-            "email": user["email"],
-            "name": user["name"],
+            "email":   user["email"],
+            "name":    user["name"],
             "picture": user["picture"],
         }
     )
@@ -91,9 +95,80 @@ def callback(request: Request):
     )
     return RedirectResponse(url=frontend_url + params)
 
+
 @app.get("/auth/me")
 def me(user: dict = Depends(aktif_kullanici)):
     return {"logged_in_user": user}
+
+
+# ═══════════════════════════════════════════
+#  Auth — Dropbox
+# ═══════════════════════════════════════════
+
+_dropbox_states: dict = {}   # state → email (bellekte, sunucu restart'ta sıfırlanır)
+FRONTEND_INTEGRATIONS = "http://localhost:3000/settings/integrations"
+
+
+@app.get("/auth/dropbox/login")
+def dropbox_login(user: dict = Depends(aktif_kullanici)):
+    """Dropbox OAuth2 akışını başlatır. Kullanıcıyı yetkilendirme sayfasına yönlendirir."""
+    app_key = os.getenv("DROPBOX_APP_KEY")
+    redirect_uri = os.getenv("DROPBOX_REDIRECT_URI", "http://localhost:8000/auth/dropbox/callback")
+
+    state = secrets.token_urlsafe(16)
+    _dropbox_states[state] = user["email"]
+
+    auth_url = (
+        "https://www.dropbox.com/oauth2/authorize"
+        f"?client_id={app_key}"
+        "&response_type=code"
+        f"&redirect_uri={redirect_uri}"
+        f"&state={state}"
+        "&token_access_type=offline"
+    )
+    return {"auth_url": auth_url}
+
+
+@app.get("/auth/dropbox/callback")
+def dropbox_callback(request: Request):
+    """Dropbox'tan dönen auth code'u access token ile değiştirir ve kaydeder."""
+    error = request.query_params.get("error")
+    if error:
+        return RedirectResponse(f"{FRONTEND_INTEGRATIONS}?error={error}")
+
+    code = request.query_params.get("code")
+    state = request.query_params.get("state")
+
+    email = _dropbox_states.pop(state, None)
+    if not email:
+        return RedirectResponse(f"{FRONTEND_INTEGRATIONS}?error=invalid_state")
+
+    app_key = os.getenv("DROPBOX_APP_KEY")
+    app_secret = os.getenv("DROPBOX_APP_SECRET")
+    redirect_uri = os.getenv("DROPBOX_REDIRECT_URI", "http://localhost:8000/auth/dropbox/callback")
+
+    try:
+        resp = _httpx.post(
+            "https://api.dropboxapi.com/oauth2/token",
+            data={
+                "code": code,
+                "grant_type": "authorization_code",
+                "redirect_uri": redirect_uri,
+            },
+            auth=(app_key, app_secret),
+            timeout=15,
+        )
+        resp.raise_for_status()
+        token_data = resp.json()
+    except Exception as e:
+        return RedirectResponse(f"{FRONTEND_INTEGRATIONS}?error=token_exchange_failed")
+
+    access_token = token_data.get("access_token")
+    if not access_token:
+        return RedirectResponse(f"{FRONTEND_INTEGRATIONS}?error=no_access_token")
+
+    credentials_kaydet(email, "dropbox", access_token)
+    return RedirectResponse(f"{FRONTEND_INTEGRATIONS}?connected=dropbox")
 
 
 # ═══════════════════════════════════════════
@@ -108,31 +183,28 @@ class IndexRequest(BaseModel):
 @app.post("/index")
 def index_photos(
     body: IndexRequest,
-    ctx: dict = Depends(kullanici_credentials),
+    ctx: dict = Depends(kullanici_tum_credentials),
 ):
     """
-    Tam indexleme — tüm fotoğrafları sıfırdan indexler.
-    İlk kullanımda veya Settings'teki "Yeniden İndeksle" butonunda çağrılır.
-    Bitince page_token kaydeder → sonraki /sync çağrıları delta olur.
+    Tam indexleme — tüm bağlı cloud provider'larını sıfırdan indexler.
+    Bitince her provider için page_token kaydeder.
     """
     user = ctx["user"]
-    credentials = ctx["credentials"]
+    all_credentials = ctx["credentials"]
     email = user["email"]
-
-    drive_service = drive_servisi_olustur(credentials)
     col_name = collection_adi(email)
 
     result = index_all(
-        drive_service=drive_service,
         qdrant_client=qdrant_client,
         col_name=col_name,
         email=email,
+        all_credentials=all_credentials,
         limit=body.limit,
         folder_id=body.folder_id,
     )
 
     return {
-        "message": "Indexleme tamamlandı",
+        "message":    "Indexleme tamamlandı",
         "collection": col_name,
         **result,
     }
@@ -144,38 +216,33 @@ def index_photos(
 
 @app.post("/sync")
 def sync_photos(
-    ctx: dict = Depends(kullanici_credentials),
+    ctx: dict = Depends(kullanici_tum_credentials),
 ):
     """
-    Delta senkronizasyon — sadece değişenleri işler.
-    - Kayıtlı page_token yoksa → "önce /index çağır" uyarısı
-    - Varsa → Changes API ile yeni/silinen fotoğrafları tespit et
-    - Yenileri indexle, silinenleri Qdrant'tan kaldır
-    - Yeni page_token kaydet
+    Delta sync — sadece son sync'ten bu yana değişenleri işler.
+    Kayıtlı token yoksa "önce /index çağır" uyarısı döner.
     """
     user = ctx["user"]
-    credentials = ctx["credentials"]
+    all_credentials = ctx["credentials"]
     email = user["email"]
-
-    drive_service = drive_servisi_olustur(credentials)
     col_name = collection_adi(email)
 
     result = delta_sync(
-        drive_service=drive_service,
         qdrant_client=qdrant_client,
         col_name=col_name,
         email=email,
+        all_credentials=all_credentials,
     )
 
     if result is None:
         return {
             "message": "Henüz indexleme yapılmamış. Önce POST /index çağırın.",
-            "synced": False,
+            "synced":  False,
         }
 
     return {
         "message": "Senkronizasyon tamamlandı",
-        "synced": True,
+        "synced":  True,
         **result,
     }
 
@@ -186,70 +253,209 @@ def sync_photos(
 
 @app.get("/search")
 def search_photos(
-    q: str = Query(..., description="Arama metni"),
-    limit: int = Query(default=10, ge=1, le=50),
+    q:      str = Query(..., description="Arama metni"),
+    limit:  int = Query(default=10, ge=1, le=50),
     offset: int = Query(default=0, ge=0),
+    source: Optional[str] = Query(default=None, description="Provider filtresi: gdrive | dropbox | pcloud"),
     user: dict = Depends(aktif_kullanici),
 ):
     """
-    Doğal dilde fotoğraf arama.
-    1. Metni CLIP text encoder ile 512d vektöre çevir
-    2. Qdrant'ta cosine similarity araması yap
-    3. offset/limit ile sayfalama
+    Doğal dilde fotoğraf arama. source parametresiyle belirli bir cloud'a filtre uygulanabilir.
     """
     email = user["email"]
     col_name = collection_adi(email)
 
     query_vector = metin_vektore_cevir(q)
 
+    # Source filtresi Python tarafında yapılıyor — Qdrant filter API versiyonuyla
+    # uyumsuzluk yaşanmaması için fazladan sonuç çekip burada filtreliyoruz.
+    fetch_limit = (limit + offset) * 4 if source else limit + offset
+
     search_response = qdrant_client.query_points(
         collection_name=col_name,
         query=query_vector,
-        limit=limit + offset,
+        limit=fetch_limit,
     )
 
-    paginated = search_response.points[offset:]
+    points = search_response.points
+    if source:
+        points = [p for p in points if p.payload.get("source") == source]
+
+    paginated = points[offset : offset + limit]
 
     results = []
     for hit in paginated:
-        results.append(
-            {
-                "filename": hit.payload.get("filename"),
-                "file_id": hit.payload.get("file_id"),
-                "drive_url": hit.payload.get("drive_url"),
-                "thumbnail_url": f"https://drive.google.com/thumbnail?id={hit.payload.get('file_id')}&sz=w400",
-                "score": round(hit.score, 4),
-            }
-        )
+        p = hit.payload
+        file_source = p.get("source", "gdrive")
+        file_id = p.get("file_id")
 
-    collection_info = qdrant_client.get_collection(col_name)
-    total_points = collection_info.points_count
+        if file_source == "gdrive":
+            thumbnail_url = f"https://drive.google.com/thumbnail?id={file_id}&sz=w400"
+        else:
+            thumbnail_url = p.get("drive_url", "")
+
+        results.append({
+            "filename":      p.get("filename"),
+            "file_id":       file_id,
+            "drive_url":     p.get("drive_url"),
+            "source":        file_source,
+            "folder_path":   p.get("folder_path", ""),
+            "thumbnail_url": thumbnail_url,
+            "score":         round(hit.score, 4),
+        })
+
+    total_filtered = len(points)   # filtre uygulandıysa filtrelenmiş sayı
+    if not source:
+        # filtre yoksa koleksiyon toplamını kullan (daha verimli)
+        try:
+            total_filtered = qdrant_client.get_collection(col_name).points_count
+        except Exception:
+            total_filtered = len(points)
 
     return {
-        "results": results,
-        "total_found": total_points,
-        "has_more": (offset + limit) < total_points,
-        "query": q,
+        "results":     results,
+        "total_found": total_filtered,
+        "has_more":    (offset + limit) < total_filtered,
+        "query":       q,
     }
-@app.get("/thumbnail/{file_id}")
-def thumbnail(file_id: str, token: str = Query(...), ):
+
+
+# ═══════════════════════════════════════════
+#  Integrations (bağlı hesaplar)
+# ═══════════════════════════════════════════
+
+VALID_PROVIDERS    = {"gdrive", "dropbox"}              # aktif provider'lar
+DISABLED_PROVIDERS = {"onedrive", "pcloud"}            # kod muhafaza edildi, entegrasyon devre dışı
+PROVIDER_LABELS = {
+    "gdrive":   "Google Drive",
+    "dropbox":  "Dropbox",
+    "pcloud":   "pCloud",
+    "onedrive": "OneDrive",
+}
+
+
+@app.get("/integrations")
+def get_integrations(user: dict = Depends(aktif_kullanici)):
+    """Kullanıcının hangi provider'lara bağlı olduğunu döner."""
+    all_creds = credentials_getir_tum(user["email"])
+    result = {
+        p: {"connected": p in all_creds, "label": PROVIDER_LABELS[p], "disabled": False}
+        for p in VALID_PROVIDERS
+    }
+    result.update({
+        p: {"connected": False, "label": PROVIDER_LABELS[p], "disabled": True}
+        for p in DISABLED_PROVIDERS
+    })
+    return result
+
+
+@app.delete("/integrations/{source}")
+def revoke_integration(source: str, user: dict = Depends(aktif_kullanici)):
+    """Bir provider bağlantısını keser ve sync token'ını siler."""
+    if source not in VALID_PROVIDERS:
+        raise HTTPException(status_code=400, detail="Geçersiz provider")
+    credentials_sil(user["email"], source)
+    page_token_sil(user["email"], source)
+    return {"message": f"{PROVIDER_LABELS[source]} bağlantısı kesildi", "source": source}
+
+
+# ═══════════════════════════════════════════
+#  Photo actions (silme, yinelenenleri bul)
+# ═══════════════════════════════════════════
+
+@app.delete("/photos/{source}/{file_id}")
+def delete_photo(
+    source: str,
+    file_id: str,
+    user: dict = Depends(aktif_kullanici),
+):
+    """
+    Fotoğrafı hem cloud provider'dan hem de Qdrant'tan siler.
+    """
+    if source not in VALID_PROVIDERS:
+        raise HTTPException(status_code=400, detail="Geçersiz provider")
+
+    creds = credentials_getir(user["email"], source)
+    if not creds:
+        raise HTTPException(status_code=400, detail=f"{PROVIDER_LABELS[source]} hesabı bağlı değil")
+
+    provider = provider_getir(source, creds)
+    cloud_deleted = provider.foto_sil(file_id)
+
+    col_name = collection_adi(user["email"])
+    fotograf_sil(qdrant_client, col_name, file_id)
+
+    return {"deleted": True, "cloud_deleted": cloud_deleted}
+
+
+@app.get("/photos/duplicates")
+def get_duplicates(
+    threshold: float = Query(default=0.97, ge=0.5, le=1.0),
+    limit: int = Query(default=250, ge=10, le=500),
+    user: dict = Depends(aktif_kullanici),
+):
+    """
+    Koleksiyondaki yüksek benzerlikli fotoğraf gruplarını döner.
+    threshold: minimum cosine benzerliği (0.97 önerilen)
+    limit: taranacak maksimum fotoğraf sayısı
+    """
+    col_name = collection_adi(user["email"])
+    try:
+        groups = duplikatlari_bul(qdrant_client, col_name, threshold, limit)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Yinelenen tarama hatası: {e}")
+    return {"groups": groups, "total_groups": len(groups)}
+
+
+# ═══════════════════════════════════════════
+#  Thumbnail proxy (tüm provider'lar)
+# ═══════════════════════════════════════════
+
+@app.get("/thumbnail")
+def thumbnail(
+    file_id: str = Query(...),
+    token:   str = Query(...),
+    source:  str = Query(default="gdrive"),
+):
+    from fastapi.responses import Response as _Resp
     from jwt_handler import jwt_dogrula
-    from token_store import getir as credentials_getir
-    
+
     payload = jwt_dogrula(token)
     if not payload:
         raise HTTPException(status_code=401, detail="Geçersiz token")
-    
-    creds = credentials_getir(payload["email"])
-    if not creds:
-        raise HTTPException(status_code=401, detail="Oturum bulunamadı")
-    
-    drive_service = drive_servisi_olustur(creds)
-    request_obj = drive_service.files().get_media(fileId=file_id)
-    buffer = io.BytesIO()
-    downloader = MediaIoBaseDownload(buffer, request_obj)
-    done = False
-    while not done:
-        _, done = downloader.next_chunk()
-    buffer.seek(0)
-    return StreamingResponse(buffer, media_type="image/jpeg")
+
+    email = payload["email"]
+
+    if source == "gdrive":
+        from providers.gdrive import GoogleDriveProvider
+        from googleapiclient.http import MediaIoBaseDownload
+
+        creds = credentials_getir(email, "gdrive")
+        if not creds:
+            raise HTTPException(status_code=401, detail="Google Drive oturumu bulunamadı")
+
+        provider = GoogleDriveProvider(creds)
+        req = provider.service.files().get_media(fileId=file_id)
+        buf = io.BytesIO()
+        dl = MediaIoBaseDownload(buf, req)
+        done = False
+        while not done:
+            _, done = dl.next_chunk()
+        return _Resp(content=buf.getvalue(), media_type="image/jpeg")
+
+    if source == "dropbox":
+        import dropbox as _dropbox
+
+        creds = credentials_getir(email, "dropbox")
+        if not creds:
+            raise HTTPException(status_code=401, detail="Dropbox oturumu bulunamadı")
+
+        try:
+            dbx = _dropbox.Dropbox(creds)
+            # Geçici CDN linki al → browser doğrudan Dropbox'tan yükler, backend veri taşımaz
+            result = dbx.files_get_temporary_link(file_id)
+            return RedirectResponse(url=result.link, status_code=302)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Dropbox thumbnail hatası: {e}")
+
+    raise HTTPException(status_code=400, detail=f"Thumbnail proxy desteklenmiyor: {source}")
