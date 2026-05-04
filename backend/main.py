@@ -167,7 +167,10 @@ def dropbox_callback(request: Request):
     if not access_token:
         return RedirectResponse(f"{FRONTEND_INTEGRATIONS}?error=no_access_token")
 
-    credentials_kaydet(email, "dropbox", access_token)
+    credentials_kaydet(email, "dropbox", {
+        "access_token":  access_token,
+        "refresh_token": token_data.get("refresh_token"),
+    })
     return RedirectResponse(f"{FRONTEND_INTEGRATIONS}?connected=dropbox")
 
 
@@ -444,16 +447,16 @@ def thumbnail(
         return _Resp(content=buf.getvalue(), media_type="image/jpeg")
 
     if source == "dropbox":
-        import dropbox as _dropbox
+        from providers.dropbox import DropboxProvider
 
         creds = credentials_getir(email, "dropbox")
         if not creds:
             raise HTTPException(status_code=401, detail="Dropbox oturumu bulunamadı")
 
         try:
-            dbx = _dropbox.Dropbox(creds)
+            provider = DropboxProvider(creds)
             # Geçici CDN linki al → browser doğrudan Dropbox'tan yükler, backend veri taşımaz
-            result = dbx.files_get_temporary_link(file_id)
+            result = provider.dbx.files_get_temporary_link(file_id)
             return RedirectResponse(url=result.link, status_code=302)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Dropbox thumbnail hatası: {e}")
