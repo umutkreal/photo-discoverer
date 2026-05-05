@@ -9,9 +9,9 @@ export default function Navbar() {
   const { user, logout } = useAuth();
 
   const navLinks = [
-    { href: "/dashboard", label: "Panel" },
-    { href: "/search", label: "Ara" },
-    { href: "/duplicates", label: "Yinelenenler" },
+    { href: "/dashboard",             label: "Panel"          },
+    { href: "/search",                label: "Ara"            },
+    { href: "/duplicates",            label: "Yinelenenler"   },
     { href: "/settings/integrations", label: "Entegrasyonlar" },
   ];
 

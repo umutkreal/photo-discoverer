@@ -78,6 +78,20 @@ export interface PhotoResult {
   folder_path: string;
   score: number;
   file_size?: number;
+  // EXIF — opsiyonel, yoksa undefined
+  year?: number;
+  month?: number;
+  date_taken?: string;
+  camera_make?: string;
+  camera_model?: string;
+  lat?: number;
+  lon?: number;
+}
+export interface SearchFilters {
+  source?: SourceKey;
+  year_from?: number;
+  year_to?: number;
+  camera_make?: string;
 }
 export interface SearchResponse {
   results: PhotoResult[];
@@ -85,16 +99,22 @@ export interface SearchResponse {
   has_more: boolean;
   query: string;
 }
+export interface StatsResponse {
+  total: number;
+  with_exif: number;
+  with_gps: number;
+  camera_makes: string[];
+}
 export const searchApi = {
-  search: (q: string, limit = 12, offset = 0, source?: SourceKey) => {
-    const params = new URLSearchParams({
-      q,
-      limit: String(limit),
-      offset: String(offset),
-    });
-    if (source) params.set("source", source);
+  search: (q: string, limit = 12, offset = 0, filters: SearchFilters = {}) => {
+    const params = new URLSearchParams({ q, limit: String(limit), offset: String(offset) });
+    if (filters.source)     params.set("source",      filters.source);
+    if (filters.year_from)  params.set("year_from",   String(filters.year_from));
+    if (filters.year_to)    params.set("year_to",     String(filters.year_to));
+    if (filters.camera_make) params.set("camera_make", filters.camera_make);
     return request<SearchResponse>(`/search?${params}`);
   },
+  stats: () => request<StatsResponse>("/stats"),
 };
 
 export function thumbnailUrl(file_id: string, source: SourceKey = "gdrive"): string {
