@@ -162,6 +162,41 @@ export const photoApi = {
     request<DuplicatesResponse>(`/photos/duplicates?threshold=${threshold}&limit=${limit}`),
 };
 
+// ─── Albums ───
+export interface AlbumPhoto {
+  source:      SourceKey;
+  file_id:     string;
+  filename:    string;
+  drive_url:   string;
+  folder_path: string;
+  file_size:   number;
+  added_at:    string;
+}
+export interface Album {
+  album_id:    string;
+  owner:       string;
+  name:        string;
+  created_at:  string;
+  photo_count: number;
+  photos?:     AlbumPhoto[];
+}
+export const albumApi = {
+  list:   () => request<{ albums: Album[] }>("/albums"),
+  get:    (id: string) => request<Album & { photos: AlbumPhoto[] }>(`/albums/${id}`),
+  create: (name: string) => request<Album>("/albums", { method: "POST", body: JSON.stringify({ name }) }),
+  rename: (id: string, name: string) =>
+    request<{ message: string }>(`/albums/${id}`, { method: "PATCH", body: JSON.stringify({ name }) }),
+  delete: (id: string) => request<{ message: string }>(`/albums/${id}`, { method: "DELETE" }),
+  addPhoto: (album_id: string, photo: Omit<AlbumPhoto, "added_at">) =>
+    request<{ message: string }>(`/albums/${album_id}/photos`, {
+      method: "POST", body: JSON.stringify(photo),
+    }),
+  removePhoto: (album_id: string, source: SourceKey, file_id: string) => {
+    const p = new URLSearchParams({ source, file_id });
+    return request<{ message: string }>(`/albums/${album_id}/photos?${p}`, { method: "DELETE" });
+  },
+};
+
 // ─── Source config (shared UI helpers) ───
 export const SOURCE_CONFIG: Record<SourceKey, { label: string; color: string; bg: string }> = {
   gdrive:   { label: "Google Drive", color: "#4285F4", bg: "rgba(66,133,244,0.15)" },

@@ -3,9 +3,9 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/common/Navbar";
-import { searchApi, thumbnailUrl, SOURCE_CONFIG } from "@/lib/api";
+import { searchApi, albumApi, thumbnailUrl, SOURCE_CONFIG } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
-import type { PhotoResult, SourceKey, SearchFilters, StatsResponse } from "@/lib/api";
+import type { PhotoResult, SourceKey, SearchFilters, StatsResponse, Album } from "@/lib/api";
 
 const LIMIT = 12;
 
@@ -169,6 +169,79 @@ function SourceBadge({ source }: { source: SourceKey }) {
   );
 }
 
+// ─── Add to Album button ──────────────────────────────────────
+
+function AddToAlbumButton({ photo }: { photo: PhotoResult }) {
+  const [open, setOpen]       = useState(false);
+  const [albums, setAlbums]   = useState<Album[]>([]);
+  const [busy, setBusy]       = useState(false);
+  const [done, setDone]       = useState<string | null>(null);
+
+  const handleOpen = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setOpen(true); setBusy(true);
+    try { const r = await albumApi.list(); setAlbums(r.albums); } catch {}
+    finally { setBusy(false); }
+  };
+
+  const handleAdd = async (e: React.MouseEvent, albumId: string) => {
+    e.stopPropagation();
+    try {
+      await albumApi.addPhoto(albumId, {
+        source: photo.source, file_id: photo.file_id,
+        filename: photo.filename, drive_url: photo.drive_url,
+        folder_path: photo.folder_path, file_size: photo.file_size ?? 0,
+      });
+      setDone(albumId);
+      setTimeout(() => { setOpen(false); setDone(null); }, 800);
+    } catch {}
+  };
+
+  return (
+    <div style={{ position: "relative" }} onClick={(e) => e.stopPropagation()}>
+      <button onClick={handleOpen} style={{
+        padding: "4px 10px", borderRadius: 6,
+        background: "rgba(124,109,250,0.15)", border: "1px solid rgba(124,109,250,0.3)",
+        color: "var(--accent)", fontSize: "0.72rem", fontFamily: "var(--font-body)",
+        cursor: "pointer", whiteSpace: "nowrap",
+      }}>
+        + Albüm
+      </button>
+      {open && (
+        <div style={{
+          position: "absolute", bottom: "calc(100% + 6px)", left: 0,
+          background: "var(--surface)", border: "1px solid var(--border)",
+          borderRadius: 10, padding: 8, minWidth: 180, zIndex: 50,
+          boxShadow: "0 8px 24px rgba(0,0,0,0.4)", animation: "fadeIn 0.15s ease-out",
+        }}>
+          {busy && <p style={{ fontFamily: "var(--font-body)", fontSize: "0.78rem", color: "var(--text-muted)", padding: "4px 8px", margin: 0 }}>Yükleniyor...</p>}
+          {!busy && albums.length === 0 && <p style={{ fontFamily: "var(--font-body)", fontSize: "0.78rem", color: "var(--text-muted)", padding: "4px 8px", margin: 0 }}>Albüm yok — önce oluştur</p>}
+          {!busy && albums.map((a) => (
+            <button key={a.album_id} onClick={(e) => handleAdd(e, a.album_id)} style={{
+              display: "block", width: "100%", textAlign: "left",
+              padding: "7px 10px", borderRadius: 7, border: "none",
+              background: done === a.album_id ? "rgba(74,222,128,0.15)" : "transparent",
+              color: done === a.album_id ? "var(--success)" : "var(--text)",
+              fontFamily: "var(--font-body)", fontSize: "0.82rem", cursor: "pointer",
+            }}>
+              {done === a.album_id ? "✓ Eklendi" : a.name}
+            </button>
+          ))}
+          <button onClick={(e) => { e.stopPropagation(); setOpen(false); }} style={{
+            display: "block", width: "100%", textAlign: "left",
+            padding: "5px 10px", borderRadius: 7, border: "none",
+            background: "transparent", color: "var(--text-muted)",
+            fontFamily: "var(--font-body)", fontSize: "0.75rem", cursor: "pointer",
+            borderTop: "1px solid var(--border)", marginTop: 4,
+          }}>
+            Kapat
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Photo Card ───────────────────────────────────────────────
 
 function PhotoCard({ photo, index, onClick }: { photo: PhotoResult; index: number; onClick: () => void }) {
@@ -221,12 +294,14 @@ function PhotoCard({ photo, index, onClick }: { photo: PhotoResult; index: numbe
         }}>
           {photo.filename}
         </p>
-        {/* EXIF özeti */}
-        {(photo.year || photo.camera_make) && (
-          <p style={{ fontFamily: "var(--font-body)", fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 2, opacity: 0.7 }}>
-            {[photo.year, photo.camera_make].filter(Boolean).join(" · ")}
-          </p>
-        )}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 4 }}>
+          {(photo.year || photo.camera_make) ? (
+            <p style={{ fontFamily: "var(--font-body)", fontSize: "0.72rem", color: "var(--text-muted)", opacity: 0.7, margin: 0 }}>
+              {[photo.year, photo.camera_make].filter(Boolean).join(" · ")}
+            </p>
+          ) : <span />}
+          <AddToAlbumButton photo={photo} />
+        </div>
       </div>
     </div>
   );
