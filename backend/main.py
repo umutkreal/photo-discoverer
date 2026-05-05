@@ -256,23 +256,25 @@ def sync_photos(
 
 @app.get("/search")
 def search_photos(
-    q:      str = Query(..., description="Arama metni"),
-    limit:  int = Query(default=10, ge=1, le=50),
-    offset: int = Query(default=0, ge=0),
-    source: Optional[str] = Query(default=None, description="Provider filtresi: gdrive | dropbox | pcloud"),
+    q:           str           = Query(..., description="Arama metni"),
+    limit:       int           = Query(default=10, ge=1, le=50),
+    offset:      int           = Query(default=0, ge=0),
+    source:      Optional[str] = Query(default=None),
+    year_from:   Optional[int] = Query(default=None, ge=1900, le=2100),
+    year_to:     Optional[int] = Query(default=None, ge=1900, le=2100),
+    camera_make: Optional[str] = Query(default=None),
     user: dict = Depends(aktif_kullanici),
 ):
-    """
-    Doğal dilde fotoğraf arama. source parametresiyle belirli bir cloud'a filtre uygulanabilir.
-    """
-    email = user["email"]
+    email    = user["email"]
     col_name = collection_adi(email)
 
     query_vector = metin_vektore_cevir(q)
 
-    # Source filtresi Python tarafında yapılıyor — Qdrant filter API versiyonuyla
-    # uyumsuzluk yaşanmaması için fazladan sonuç çekip burada filtreliyoruz.
-    fetch_limit = (limit + offset) * 4 if source else limit + offset
+    has_exif_filter = bool(year_from or year_to or camera_make)
+    has_any_filter  = bool(source or has_exif_filter)
+
+    # EXIF filtresi varsa koleksiyonun büyük bölümünü çek (kişisel arşiv için 500 yeterli)
+    fetch_limit = 500 if has_exif_filter else ((limit + offset) * 4 if source else limit + offset)
 
     search_response = qdrant_client.query_points(
         collection_name=col_name,
@@ -281,35 +283,46 @@ def search_photos(
     )
 
     points = search_response.points
+
+    # Python tarafı filtreleme — Qdrant filter API versiyonuyla uyumsuzluk olmasın diye
     if source:
         points = [p for p in points if p.payload.get("source") == source]
+    if year_from:
+        points = [p for p in points if (p.payload.get("year") or 0) >= year_from]
+    if year_to:
+        points = [p for p in points if (p.payload.get("year") or 9999) <= year_to]
+    if camera_make:
+        points = [p for p in points
+                  if (p.payload.get("camera_make") or "").lower() == camera_make.lower()]
 
     paginated = points[offset : offset + limit]
 
     results = []
     for hit in paginated:
-        p = hit.payload
-        file_source = p.get("source", "gdrive")
-        file_id = p.get("file_id")
-
-        if file_source == "gdrive":
-            thumbnail_url = f"https://drive.google.com/thumbnail?id={file_id}&sz=w400"
-        else:
-            thumbnail_url = p.get("drive_url", "")
-
+        p        = hit.payload
+        src      = p.get("source", "gdrive")
+        file_id  = p.get("file_id")
         results.append({
-            "filename":      p.get("filename"),
-            "file_id":       file_id,
-            "drive_url":     p.get("drive_url"),
-            "source":        file_source,
-            "folder_path":   p.get("folder_path", ""),
-            "thumbnail_url": thumbnail_url,
-            "score":         round(hit.score, 4),
+            "filename":     p.get("filename"),
+            "file_id":      file_id,
+            "drive_url":    p.get("drive_url"),
+            "source":       src,
+            "folder_path":  p.get("folder_path", ""),
+            "thumbnail_url": "",   # frontend thumbnailUrl() fonksiyonu üretiyor
+            "score":        round(hit.score, 4),
+            "file_size":    p.get("file_size", 0),
+            # EXIF — yoksa None, frontend buna toleranslı
+            "year":         p.get("year"),
+            "month":        p.get("month"),
+            "date_taken":   p.get("date_taken"),
+            "camera_make":  p.get("camera_make"),
+            "camera_model": p.get("camera_model"),
+            "lat":          p.get("lat"),
+            "lon":          p.get("lon"),
         })
 
-    total_filtered = len(points)   # filtre uygulandıysa filtrelenmiş sayı
-    if not source:
-        # filtre yoksa koleksiyon toplamını kullan (daha verimli)
+    total_filtered = len(points)
+    if not has_any_filter:
         try:
             total_filtered = qdrant_client.get_collection(col_name).points_count
         except Exception:
@@ -320,6 +333,37 @@ def search_photos(
         "total_found": total_filtered,
         "has_more":    (offset + limit) < total_filtered,
         "query":       q,
+    }
+
+
+# ═══════════════════════════════════════════
+#  Stats (EXIF kapsam istatistikleri)
+# ═══════════════════════════════════════════
+
+@app.get("/stats")
+def collection_stats(user: dict = Depends(aktif_kullanici)):
+    """Koleksiyondaki EXIF ve GPS kapsamını döner. Dropdown için camera_makes listesi içerir."""
+    col_name = collection_adi(user["email"])
+    try:
+        records, _ = qdrant_client.scroll(
+            collection_name=col_name,
+            limit=5000,
+            with_payload=True,
+            with_vectors=False,
+        )
+    except Exception:
+        return {"total": 0, "with_exif": 0, "with_gps": 0, "camera_makes": []}
+
+    total      = len(records)
+    with_exif  = sum(1 for r in records if r.payload.get("year") is not None)
+    with_gps   = sum(1 for r in records if r.payload.get("lat")  is not None)
+    makes      = sorted({r.payload["camera_make"] for r in records if r.payload.get("camera_make")})
+
+    return {
+        "total":        total,
+        "with_exif":    with_exif,
+        "with_gps":     with_gps,
+        "camera_makes": makes,
     }
 
 

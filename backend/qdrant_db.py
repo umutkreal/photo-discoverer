@@ -37,22 +37,33 @@ def fotograf_kaydet(client, collection_name, vektor, foto: dict, source: str = "
     """Fotoğrafı Qdrant'a kaydeder. source alanı hangi cloud'dan geldiğini belirtir."""
     point_id = file_id_to_point_id(foto["id"])
     fallback_url = f"https://drive.google.com/file/d/{foto['id']}/view" if source == "gdrive" else ""
+
+    exif = foto.get("exif") or {}
+
+    # None değerler payload'a dahil edilmez — Qdrant'ta alan yokmuş gibi davranır,
+    # hata vermez; sadece o fotoğraf EXIF filtresi kapsamı dışında kalır.
+    payload: dict = {
+        "filename":     foto["name"],
+        "file_id":      foto["id"],
+        "drive_url":    foto.get("drive_url", fallback_url),
+        "source":       source,
+        "folder_path":  foto.get("folder_path", ""),
+        "file_size":    foto.get("size", 0),
+    }
+    exif_fields = {
+        "date_taken":   exif.get("date_taken"),
+        "year":         exif.get("year"),
+        "month":        exif.get("month"),
+        "lat":          exif.get("lat"),
+        "lon":          exif.get("lon"),
+        "camera_make":  exif.get("camera_make"),
+        "camera_model": exif.get("camera_model"),
+    }
+    payload.update({k: v for k, v in exif_fields.items() if v is not None})
+
     client.upsert(
         collection_name=collection_name,
-        points=[
-            PointStruct(
-                id=point_id,
-                vector=vektor,
-                payload={
-                    "filename":    foto["name"],
-                    "file_id":     foto["id"],
-                    "drive_url":   foto.get("drive_url", fallback_url),
-                    "source":      source,
-                    "folder_path": foto.get("folder_path", ""),
-                    "file_size":   foto.get("size", 0),
-                },
-            )
-        ],
+        points=[PointStruct(id=point_id, vector=vektor, payload=payload)],
     )
 
 
