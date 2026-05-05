@@ -24,6 +24,13 @@ from embedding import metin_vektore_cevir
 from qdrant_db import qdrant_baglanti, collection_olustur, fotograf_sil, duplikatlari_bul
 from providers.factory import provider_getir
 from sync import index_all, delta_sync
+from album_store import (
+    init_db as album_db_init,
+    album_olustur, albumleri_listele, album_getir,
+    album_yeniden_adlandir, album_sil,
+    fotograf_ekle as album_fotograf_ekle,
+    fotograf_cikar as album_fotograf_cikar,
+)
 
 load_dotenv()
 
@@ -38,6 +45,7 @@ app.add_middleware(
 )
 
 qdrant_client = qdrant_baglanti()
+album_db_init()
 VECTOR_SIZE = 512
 
 
@@ -452,6 +460,85 @@ def get_duplicates(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Yinelenen tarama hatası: {e}")
     return {"groups": groups, "total_groups": len(groups)}
+
+
+# ═══════════════════════════════════════════
+#  Albums
+# ═══════════════════════════════════════════
+
+class AlbumCreateRequest(BaseModel):
+    name: str
+
+class AlbumRenameRequest(BaseModel):
+    name: str
+
+class AlbumPhotoRequest(BaseModel):
+    source:      str
+    file_id:     str
+    filename:    str = ""
+    drive_url:   str = ""
+    folder_path: str = ""
+    file_size:   int = 0
+
+
+@app.post("/albums", status_code=201)
+def create_album(body: AlbumCreateRequest, user: dict = Depends(aktif_kullanici)):
+    if not body.name.strip():
+        raise HTTPException(400, "Albüm adı boş olamaz")
+    return album_olustur(user["email"], body.name.strip())
+
+
+@app.get("/albums")
+def list_albums(user: dict = Depends(aktif_kullanici)):
+    return {"albums": albumleri_listele(user["email"])}
+
+
+@app.get("/albums/{album_id}")
+def get_album(album_id: str, user: dict = Depends(aktif_kullanici)):
+    album = album_getir(album_id, user["email"])
+    if not album:
+        raise HTTPException(404, "Albüm bulunamadı")
+    return album
+
+
+@app.patch("/albums/{album_id}")
+def rename_album(album_id: str, body: AlbumRenameRequest, user: dict = Depends(aktif_kullanici)):
+    if not body.name.strip():
+        raise HTTPException(400, "Albüm adı boş olamaz")
+    if not album_yeniden_adlandir(album_id, user["email"], body.name.strip()):
+        raise HTTPException(404, "Albüm bulunamadı")
+    return {"message": "Albüm adı güncellendi"}
+
+
+@app.delete("/albums/{album_id}")
+def delete_album(album_id: str, user: dict = Depends(aktif_kullanici)):
+    if not album_sil(album_id, user["email"]):
+        raise HTTPException(404, "Albüm bulunamadı")
+    return {"message": "Albüm silindi"}
+
+
+@app.post("/albums/{album_id}/photos", status_code=201)
+def add_photo_to_album(album_id: str, body: AlbumPhotoRequest, user: dict = Depends(aktif_kullanici)):
+    if not album_fotograf_ekle(
+        album_id=album_id, owner=user["email"],
+        source=body.source, file_id=body.file_id,
+        filename=body.filename, drive_url=body.drive_url,
+        folder_path=body.folder_path, file_size=body.file_size,
+    ):
+        raise HTTPException(404, "Albüm bulunamadı")
+    return {"message": "Fotoğraf albüme eklendi"}
+
+
+@app.delete("/albums/{album_id}/photos")
+def remove_photo_from_album(
+    album_id: str,
+    source:   str = Query(...),
+    file_id:  str = Query(...),
+    user: dict = Depends(aktif_kullanici),
+):
+    if not album_fotograf_cikar(album_id, user["email"], source, file_id):
+        raise HTTPException(404, "Albüm veya fotoğraf bulunamadı")
+    return {"message": "Fotoğraf albümden çıkarıldı"}
 
 
 # ═══════════════════════════════════════════
