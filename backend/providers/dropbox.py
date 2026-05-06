@@ -56,25 +56,31 @@ class DropboxProvider(BaseProvider):
         return Image.open(io.BytesIO(response.content)).convert("RGB")
 
     def degisiklikleri_getir(self, page_token):
-        sonuc = self.dbx.files_list_folder_continue(page_token)
-        eklenenler = []
-        silinenler = []
+        eklenenler: list = []
+        silinenler: list = []
+        cursor = page_token
 
-        for entry in sonuc.entries:
-            if isinstance(entry, dropbox.files.DeletedMetadata):
-                silinenler.append(entry.path_lower)
-            elif isinstance(entry, dropbox.files.FileMetadata):
-                if entry.name.lower().endswith((".jpg", ".jpeg", ".png", ".heic")):
-                    eklenenler.append({
-                        "id":          entry.path_lower,
-                        "name":        entry.name,
-                        "size":        entry.size,
-                        "folder_path": "/".join(entry.path_display.split("/")[:-1]),
-                        "drive_url":   f"https://www.dropbox.com/home{entry.path_display}",
-                        "exif":        {},
-                    })
+        # Tüm sayfalar tüketilene kadar döngü (yeniden adlandırma birden fazla sayfaya yayılabilir)
+        while True:
+            sonuc = self.dbx.files_list_folder_continue(cursor)
+            for entry in sonuc.entries:
+                if isinstance(entry, dropbox.files.DeletedMetadata):
+                    silinenler.append(entry.path_lower)
+                elif isinstance(entry, dropbox.files.FileMetadata):
+                    if entry.name.lower().endswith((".jpg", ".jpeg", ".png", ".heic")):
+                        eklenenler.append({
+                            "id":          entry.path_lower,
+                            "name":        entry.name,
+                            "size":        entry.size,
+                            "folder_path": "/".join(entry.path_display.split("/")[:-1]),
+                            "drive_url":   f"https://www.dropbox.com/home{entry.path_display}",
+                            "exif":        {},
+                        })
+            cursor = sonuc.cursor
+            if not sonuc.has_more:
+                break
 
-        return eklenenler, silinenler, sonuc.cursor
+        return eklenenler, silinenler, cursor
 
     def foto_sil(self, file_id):
         try:
