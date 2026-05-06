@@ -75,65 +75,115 @@ def fotograf_sil(client, collection_name, file_id: str):
     )
 
 
-def duplikatlari_bul(client, collection_name: str, threshold: float = 0.97, limit: int = 300) -> list:
+def duplikatlari_bul(client, collection_name: str, threshold: float = 0.95, limit: int = 500) -> list:
     """
-    Yüksek cosine benzerliğine sahip fotoğraf gruplarını döner (potansiyel yinelemeler).
-    Her grup en az 2 üye içerir. O(n) sorgu — limit ile kısıtla.
+    Yüksek cosine benzerliğine sahip fotoğraf gruplarını döner.
     """
+    print(f"\n{'='*60}")
+    print(f"🔍 DUPLIKAT TARAMA — threshold={threshold}, limit={limit}")
+    print(f"{'='*60}")
+
     try:
-        records, _ = client.scroll(
+        all_records, _ = client.scroll(
             collection_name=collection_name,
             limit=limit,
             with_vectors=True,
             with_payload=True,
         )
-    except Exception:
+    except Exception as e:
+        print(f"❌ Scroll hatası: {e}")
         return []
+
+    print(f"📦 {len(all_records)} kayıt çekildi")
+
+    # İLK KAYDIN VEKTÖR FORMATINI İNCELE
+    if all_records:
+        v = all_records[0].vector
+        print(f"\n🧪 İlk kaydın vektör formatı:")
+        print(f"   type: {type(v).__name__}")
+        if isinstance(v, list):
+            print(f"   length: {len(v)}")
+            print(f"   ilk 3 değer: {v[:3]}")
+        elif isinstance(v, dict):
+            print(f"   keys: {list(v.keys())}")
+            for k, val in v.items():
+                print(f"   '{k}' → type={type(val).__name__}, len={len(val) if hasattr(val,'__len__') else '?'}")
+        else:
+            print(f"   value: {v}")
 
     visited: set = set()
     groups = []
 
-    for record in records:
+    for idx, record in enumerate(all_records):
         if record.id in visited:
             continue
 
-        try:
-            hits = client.search(
-                collection_name=collection_name,
-                query_vector=record.vector,
-                limit=10,
-                score_threshold=threshold,
-            )
-        except Exception:
+        # Vektör formatı uyumluluğu — dict ise listeye çıkar
+        vec = record.vector
+        if isinstance(vec, dict):
+            # Named vector veya unnamed vector dict olarak gelmiş
+            vec = vec.get("") or (next(iter(vec.values())) if vec else None)
+
+        if vec is None or (hasattr(vec, '__len__') and len(vec) == 0):
+            print(f"⚠️ [{idx}] {record.payload.get('filename','?')} — vektör boş/None, atlanıyor")
             visited.add(record.id)
             continue
 
-        members = []
-        for hit in hits:
-            p = hit.payload or {}
-            if hit.id == record.id:
-                members.insert(0, {
-                    "file_id":     record.payload.get("file_id", str(record.id)),
-                    "filename":    record.payload.get("filename", ""),
-                    "source":      record.payload.get("source", "gdrive"),
-                    "drive_url":   record.payload.get("drive_url", ""),
-                    "file_size":   record.payload.get("file_size", 0),
-                    "folder_path": record.payload.get("folder_path", ""),
-                    "score":       1.0,
-                })
-            elif hit.id not in visited:
-                members.append({
-                    "file_id":     p.get("file_id", str(hit.id)),
-                    "filename":    p.get("filename", ""),
-                    "source":      p.get("source", "gdrive"),
-                    "drive_url":   p.get("drive_url", ""),
-                    "file_size":   p.get("file_size", 0),
-                    "folder_path": p.get("folder_path", ""),
-                    "score":       round(hit.score, 4),
-                })
-                visited.add(hit.id)
+        try:
+            result = client.query_points(
+                collection_name=collection_name,
+                query=vec,
+                limit=15,
+            )
+            hits = result.points
+        except Exception as e:
+            print(f"❌ [{idx}] {record.payload.get('filename','?')} — query_points hatası: {e}")
+            visited.add(record.id)
+            continue
 
-        if len(members) >= 2:
+        # Threshold filtreleme + log
+        all_scores = [(h.score, h.payload.get("filename","?") if h.payload else "?") for h in hits]
+        hits = [h for h in hits if h.score >= threshold]
+        print(f"\n📸 [{idx}] {record.payload.get('filename','?')}")
+        print(f"   tüm hits ({len(all_scores)}): {[(round(s,3), n) for s, n in all_scores]}")
+        print(f"   threshold {threshold} üstü: {len(hits)}")
+
+        # Self her zaman ilk üye — Qdrant'ın self'i döndürüp döndürmemesi fark etmez
+        self_entry = {
+            "file_id":     record.payload.get("file_id", str(record.id)),
+            "filename":    record.payload.get("filename", ""),
+            "source":      record.payload.get("source", "gdrive"),
+            "drive_url":   record.payload.get("drive_url", ""),
+            "file_size":   record.payload.get("file_size", 0),
+            "folder_path": record.payload.get("folder_path", ""),
+            "score":       1.0,
+        }
+        members = [self_entry]
+
+        # Grup oluşursa visited'a eklenecek adaylar — önce topla, sonra onayla
+        candidates: list[tuple] = []
+        for hit in hits:
+            if hit.id == record.id:
+                continue  # self search sonucunda geldiyse atla, zaten ekledik
+            if hit.id not in visited:
+                p = hit.payload or {}
+                candidates.append((
+                    hit.id,
+                    {
+                        "file_id":     p.get("file_id", str(hit.id)),
+                        "filename":    p.get("filename", ""),
+                        "source":      p.get("source", "gdrive"),
+                        "drive_url":   p.get("drive_url", ""),
+                        "file_size":   p.get("file_size", 0),
+                        "folder_path": p.get("folder_path", ""),
+                        "score":       round(hit.score, 4),
+                    }
+                ))
+
+        if candidates:  # en az 1 aday varsa grup oluştu
+            for hit_id, entry in candidates:
+                members.append(entry)
+                visited.add(hit_id)  # sadece grup onaylandıktan sonra visited'a ekle
             groups.append(members)
 
         visited.add(record.id)

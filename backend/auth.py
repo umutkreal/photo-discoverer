@@ -7,7 +7,7 @@ os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
 
 SCOPES = [
     "openid",
-    "https://www.googleapis.com/auth/drive.readonly",
+    "https://www.googleapis.com/auth/drive",          # okuma + silme (readonly yetersiz)
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/userinfo.profile",
 ]

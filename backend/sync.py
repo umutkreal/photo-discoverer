@@ -7,7 +7,7 @@ Sonraki çalıştırmalarda: sadece değişenleri işle (eklenen/silinen).
 
 from providers.factory import provider_getir
 from embedding import foto_vektore_cevir
-from qdrant_db import collection_olustur, fotograf_kaydet, toplu_fotograf_sil
+from qdrant_db import collection_olustur, fotograf_kaydet, toplu_fotograf_sil, file_id_to_point_id
 from token_store import page_token_kaydet, page_token_getir
 
 
@@ -34,6 +34,24 @@ def index_all(qdrant_client, col_name, email, all_credentials: dict, limit=500, 
             continue
 
         total_found += len(fotolar)
+
+        # Hayalet kayıt temizliği: provider'ın listemediği eski Qdrant kayıtlarını sil
+        try:
+            aktif_idler = {f["id"] for f in fotolar}
+            mevcut, _ = qdrant_client.scroll(
+                collection_name=col_name, limit=5000,
+                with_payload=True, with_vectors=False,
+            )
+            hayalet_idler = [
+                r.payload["file_id"] for r in mevcut
+                if r.payload.get("source") == source
+                and r.payload.get("file_id") not in aktif_idler
+            ]
+            if hayalet_idler:
+                toplu_fotograf_sil(qdrant_client, col_name, hayalet_idler)
+                print(f"  🗑️ [{source}] {len(hayalet_idler)} hayalet kayıt temizlendi: {hayalet_idler}")
+        except Exception as e:
+            print(f"  ⚠️ [{source}] hayalet temizlik hatası: {e}")
 
         basarili = 0
         for foto in fotolar:

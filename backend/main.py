@@ -133,6 +133,7 @@ def dropbox_login(user: dict = Depends(aktif_kullanici)):
         f"&redirect_uri={redirect_uri}"
         f"&state={state}"
         "&token_access_type=offline"
+        "&scope=files.content.read+files.content.write+files.metadata.read"
     )
     return {"auth_url": auth_url}
 
@@ -375,6 +376,61 @@ def collection_stats(user: dict = Depends(aktif_kullanici)):
     }
 
 
+@app.get("/debug/collection")
+def debug_collection(email: str = Query(...)):
+    """Qdrant'taki tüm kayıtları listeler — auth gerektirmez, sadece dev ortamı."""
+    col_name = collection_adi(email)
+    try:
+        records, _ = qdrant_client.scroll(
+            collection_name=col_name,
+            limit=1000,
+            with_payload=True,
+            with_vectors=False,
+        )
+    except Exception as e:
+        return {"error": str(e), "photos": []}
+
+    photos = [
+        {
+            "source":   r.payload.get("source", "?"),
+            "filename": r.payload.get("filename", "?"),
+            "file_id":  r.payload.get("file_id", "?"),
+            "file_size": r.payload.get("file_size", 0),
+        }
+        for r in records
+    ]
+
+    by_source: dict = {}
+    for p in photos:
+        by_source.setdefault(p["source"], []).append(p["filename"])
+
+    return {
+        "total":    len(photos),
+        "by_source": {src: len(files) for src, files in by_source.items()},
+        "photos":   sorted(photos, key=lambda x: (x["source"], x["filename"])),
+    }
+
+
+@app.get("/debug/providers")
+def debug_providers(email: str = Query(...)):
+    """Her provider'ın kaç fotoğraf listelediğini gösterir — auth gerektirmez."""
+    all_creds = credentials_getir_tum(email)
+    result = {}
+
+    for source, creds in all_creds.items():
+        try:
+            provider = provider_getir(source, creds)
+            photos   = provider.fotograflari_listele(limit=500)
+            result[source] = {
+                "count":  len(photos),
+                "photos": [{"name": p["name"], "id": p["id"][:40]} for p in photos],
+            }
+        except Exception as e:
+            result[source] = {"error": str(e), "count": 0}
+
+    return result
+
+
 # ═══════════════════════════════════════════
 #  Integrations (bağlı hesaplar)
 # ═══════════════════════════════════════════
@@ -445,21 +501,74 @@ def delete_photo(
 
 @app.get("/photos/duplicates")
 def get_duplicates(
-    threshold: float = Query(default=0.97, ge=0.5, le=1.0),
-    limit: int = Query(default=250, ge=10, le=500),
+    threshold: float = Query(default=0.95, ge=0.5, le=1.0),
+    limit:     int   = Query(default=300, ge=10, le=500),
     user: dict = Depends(aktif_kullanici),
 ):
-    """
-    Koleksiyondaki yüksek benzerlikli fotoğraf gruplarını döner.
-    threshold: minimum cosine benzerliği (0.97 önerilen)
-    limit: taranacak maksimum fotoğraf sayısı
-    """
     col_name = collection_adi(user["email"])
     try:
         groups = duplikatlari_bul(qdrant_client, col_name, threshold, limit)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Yinelenen tarama hatası: {e}")
-    return {"groups": groups, "total_groups": len(groups)}
+
+    total_size = sum(
+        p.get("file_size", 0)
+        for g in groups
+        for p in g[1:]   # ilk fotoğraf dışındakiler silinebilir
+    )
+    return {
+        "groups":       groups,
+        "total_groups": len(groups),
+        "saveable_bytes": total_size,
+    }
+
+
+class _PhotoRef(BaseModel):
+    source:  str
+    file_id: str
+
+class ResolveRequest(BaseModel):
+    keep:   _PhotoRef
+    delete: list[_PhotoRef]
+
+
+@app.post("/photos/duplicates/resolve")
+def resolve_duplicates(body: ResolveRequest, user: dict = Depends(aktif_kullanici)):
+    """
+    keep: saklanacak fotoğraf — dokunulmaz.
+    delete: kalıcı silinecekler — önce buluttan, sonra Qdrant'tan.
+    """
+    email    = user["email"]
+    col_name = collection_adi(email)
+    results  = []
+
+    for item in body.delete:
+        cloud_ok = False
+        error    = None
+        creds    = credentials_getir(email, item.source)
+        if creds:
+            try:
+                prov     = provider_getir(item.source, creds)
+                cloud_ok = prov.foto_sil(item.file_id)
+            except Exception as e:
+                error = str(e)
+
+        try:
+            fotograf_sil(qdrant_client, col_name, item.file_id)
+            index_ok = True
+        except Exception as e:
+            index_ok = False
+            error = error or str(e)
+
+        results.append({
+            "source":        item.source,
+            "file_id":       item.file_id,
+            "cloud_deleted": cloud_ok,
+            "index_deleted": index_ok,
+            "error":         error,
+        })
+
+    return {"resolved": len(body.delete), "results": results}
 
 
 # ═══════════════════════════════════════════
