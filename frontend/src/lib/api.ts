@@ -152,14 +152,25 @@ export interface DuplicatesResponse {
   total_groups: number;
 }
 
+export interface ResolveResult {
+  resolved: number;
+  results: { source: string; file_id: string; cloud_deleted: boolean; index_deleted: boolean; error?: string }[];
+}
 export const photoApi = {
   delete: (source: SourceKey, file_id: string) =>
     request<{ deleted: boolean; cloud_deleted: boolean }>(
       `/photos/${source}/${encodeURIComponent(file_id)}`,
       { method: "DELETE" },
     ),
-  duplicates: (threshold = 0.97, limit = 250) =>
-    request<DuplicatesResponse>(`/photos/duplicates?threshold=${threshold}&limit=${limit}`),
+  duplicates: (threshold = 0.95, limit = 300) =>
+    request<DuplicatesResponse & { saveable_bytes: number }>(
+      `/photos/duplicates?threshold=${threshold}&limit=${limit}`,
+    ),
+  resolve: (keep: { source: SourceKey; file_id: string }, del: { source: SourceKey; file_id: string }[]) =>
+    request<ResolveResult>("/photos/duplicates/resolve", {
+      method: "POST",
+      body: JSON.stringify({ keep, delete: del }),
+    }),
 };
 
 // ─── Albums ───
