@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/common/Navbar";
 import { searchApi, albumApi, thumbnailUrl, SOURCE_CONFIG } from "@/lib/api";
@@ -386,14 +386,14 @@ function PhotoModal({ photo, onClose }: { photo: PhotoResult; onClose: () => voi
               background: "var(--surface-2)", borderRadius: 10,
             }}>
               {exifItems.map(({ label, value }) => (
-                <>
-                  <span key={label + "l"} style={{ fontFamily: "var(--font-body)", fontSize: "0.75rem", color: "var(--text-muted)", whiteSpace: "nowrap" }}>
+                <React.Fragment key={label}>
+                  <span style={{ fontFamily: "var(--font-body)", fontSize: "0.75rem", color: "var(--text-muted)", whiteSpace: "nowrap" }}>
                     {label}
                   </span>
-                  <span key={label + "v"} style={{ fontFamily: "monospace", fontSize: "0.78rem", color: "var(--text)" }}>
+                  <span style={{ fontFamily: "monospace", fontSize: "0.78rem", color: "var(--text)" }}>
                     {value}
                   </span>
-                </>
+                </React.Fragment>
               ))}
             </div>
           )}

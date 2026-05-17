@@ -291,13 +291,19 @@ export default function IntegrationsPage() {
 
   const handleConnect = async (source: SourceKey) => {
     try {
+      let auth_url: string;
       if (source === "gdrive") {
-        const { auth_url } = await authApi.login();
-        window.location.href = auth_url;
+        ({ auth_url } = await authApi.login());
       } else if (source === "dropbox") {
-        const { auth_url } = await authApi.dropboxLogin();
-        window.location.href = auth_url;
+        ({ auth_url } = await authApi.dropboxLogin());
+      } else if (source === "pcloud") {
+        ({ auth_url } = await authApi.pcloudLogin());
+      } else if (source === "onedrive") {
+        ({ auth_url } = await authApi.onedriveLogin());
+      } else {
+        return;
       }
+      window.location.href = auth_url;
     } catch {
       setToast({ type: "error", msg: "Bağlantı başlatılamadı" });
     }

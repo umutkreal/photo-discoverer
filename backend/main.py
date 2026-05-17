@@ -10,7 +10,11 @@ import os
 import secrets
 import httpx as _httpx
 
-from auth import oauth_flow_init, oauth_flow_fetch_token, get_user_info
+from auth import (
+    oauth_flow_init, oauth_flow_fetch_token, get_user_info,
+    pcloud_auth_url_olustur, pcloud_token_al,
+    onedrive_auth_url_olustur, onedrive_token_al,
+)
 from jwt_handler import jwt_olustur
 from token_store import (
     kaydet as credentials_kaydet,
@@ -181,6 +185,62 @@ def dropbox_callback(request: Request):
         "refresh_token": token_data.get("refresh_token"),
     })
     return RedirectResponse(f"{FRONTEND_INTEGRATIONS}?connected=dropbox")
+
+
+# ═══════════════════════════════════════════
+#  Auth — pCloud
+# ═══════════════════════════════════════════
+
+@app.get("/auth/pcloud/login")
+def pcloud_login(user: dict = Depends(aktif_kullanici)):
+    auth_url = pcloud_auth_url_olustur(user["email"])
+    return {"auth_url": auth_url}
+
+
+@app.get("/auth/pcloud/callback")
+def pcloud_callback(request: Request):
+    error = request.query_params.get("error")
+    if error:
+        return RedirectResponse(f"{FRONTEND_INTEGRATIONS}?error={error}")
+
+    code  = request.query_params.get("code")
+    state = request.query_params.get("state")
+
+    try:
+        token_data, email = pcloud_token_al(code, state)
+    except RuntimeError:
+        return RedirectResponse(f"{FRONTEND_INTEGRATIONS}?error=token_exchange_failed")
+
+    credentials_kaydet(email, "pcloud", token_data)
+    return RedirectResponse(f"{FRONTEND_INTEGRATIONS}?connected=pcloud")
+
+
+# ═══════════════════════════════════════════
+#  Auth — OneDrive
+# ═══════════════════════════════════════════
+
+@app.get("/auth/onedrive/login")
+def onedrive_login(user: dict = Depends(aktif_kullanici)):
+    auth_url = onedrive_auth_url_olustur(user["email"])
+    return {"auth_url": auth_url}
+
+
+@app.get("/auth/onedrive/callback")
+def onedrive_callback(request: Request):
+    error = request.query_params.get("error")
+    if error:
+        return RedirectResponse(f"{FRONTEND_INTEGRATIONS}?error={error}")
+
+    code  = request.query_params.get("code")
+    state = request.query_params.get("state")
+
+    try:
+        token_data, email = onedrive_token_al(code, state)
+    except RuntimeError:
+        return RedirectResponse(f"{FRONTEND_INTEGRATIONS}?error=token_exchange_failed")
+
+    credentials_kaydet(email, "onedrive", token_data)
+    return RedirectResponse(f"{FRONTEND_INTEGRATIONS}?connected=onedrive")
 
 
 # ═══════════════════════════════════════════
@@ -435,8 +495,8 @@ def debug_providers(email: str = Query(...)):
 #  Integrations (bağlı hesaplar)
 # ═══════════════════════════════════════════
 
-VALID_PROVIDERS    = {"gdrive", "dropbox"}              # aktif provider'lar
-DISABLED_PROVIDERS = {"onedrive", "pcloud"}            # kod muhafaza edildi, entegrasyon devre dışı
+VALID_PROVIDERS    = {"gdrive", "dropbox", "onedrive", "pcloud"}
+DISABLED_PROVIDERS: set = set()
 PROVIDER_LABELS = {
     "gdrive":   "Google Drive",
     "dropbox":  "Dropbox",
@@ -700,5 +760,40 @@ def thumbnail(
             return RedirectResponse(url=result.link, status_code=302)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Dropbox thumbnail hatası: {e}")
+
+    if source == "pcloud":
+        from providers.pcloud import PCloudProvider
+
+        creds = credentials_getir(email, "pcloud")
+        if not creds:
+            raise HTTPException(status_code=401, detail="pCloud oturumu bulunamadı")
+
+        try:
+            provider = PCloudProvider(creds["access_token"])
+            link_data = provider._get("/getthumb", fileid=int(file_id), size="256x256", crop=0)
+            download_url = f"https://{link_data['hosts'][0]}{link_data['path']}"
+            return RedirectResponse(url=download_url, status_code=302)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"pCloud thumbnail hatası: {e}")
+
+    if source == "onedrive":
+        from providers.onedrive import OneDriveProvider
+
+        creds = credentials_getir(email, "onedrive")
+        if not creds:
+            raise HTTPException(status_code=401, detail="OneDrive oturumu bulunamadı")
+
+        try:
+            headers = {"Authorization": f"Bearer {creds['access_token']}"}
+            resp = _httpx.get(
+                f"https://graph.microsoft.com/v1.0/me/drive/items/{file_id}/thumbnails/0/medium",
+                headers=headers,
+                timeout=15,
+            )
+            resp.raise_for_status()
+            thumb_url = resp.json().get("url", "")
+            return RedirectResponse(url=thumb_url, status_code=302)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"OneDrive thumbnail hatası: {e}")
 
     raise HTTPException(status_code=400, detail=f"Thumbnail proxy desteklenmiyor: {source}")

@@ -32,9 +32,11 @@ async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
 
 // ─── Auth ───
 export const authApi = {
-  login:        () => request<{ auth_url: string }>("/auth/login"),
-  me:           () => request<{ logged_in_user: { email: string; name: string; picture: string } }>("/auth/me"),
-  dropboxLogin: () => request<{ auth_url: string }>("/auth/dropbox/login"),
+  login:         () => request<{ auth_url: string }>("/auth/login"),
+  me:            () => request<{ logged_in_user: { email: string; name: string; picture: string } }>("/auth/me"),
+  dropboxLogin:  () => request<{ auth_url: string }>("/auth/dropbox/login"),
+  pcloudLogin:   () => request<{ auth_url: string }>("/auth/pcloud/login"),
+  onedriveLogin: () => request<{ auth_url: string }>("/auth/onedrive/login"),
 };
 
 // ─── Index ───

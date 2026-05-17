@@ -91,7 +91,7 @@ def delta_sync(qdrant_client, col_name, email, all_credentials: dict):
 
     for source, creds in all_credentials.items():
         saved_token = page_token_getir(email, source)
-        if saved_token is None:
+        if not saved_token:  # None veya boş string
             print(f"  ⚠️ [{source}] için kayıtlı token yok, atlanıyor.")
             continue
 

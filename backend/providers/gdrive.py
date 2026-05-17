@@ -77,13 +77,13 @@ class GoogleDriveProvider(BaseProvider):
         while True:
             response = self.service.changes().list(
                 pageToken=current_token,
-                fields="nextPageToken, newStartPageToken, changes(fileId, removed, file(id, name, mimeType, trashed))",
+                fields="nextPageToken, newStartPageToken, changes(fileId, removed, file(id, name, size, mimeType, trashed, webViewLink, parents, imageMediaMetadata))",
                 spaces="drive",
                 includeRemoved=True,
             ).execute()
 
             for change in response.get("changes", []):
-                file_id = change.get("fileId")
+                file_id   = change.get("fileId")
                 file_info = change.get("file")
 
                 if change.get("removed", False):
@@ -95,15 +95,29 @@ class GoogleDriveProvider(BaseProvider):
 
                 if file_info.get("trashed", False):
                     silinenler.append(file_id)
-                elif file_info.get("mimeType", "").startswith("image/"):
-                    eklenenler.append({
-                        "id":          file_info["id"],
-                        "name":        file_info["name"],
-                        "size":        0,
-                        "folder_path": "",
-                        "drive_url":   f"https://drive.google.com/file/d/{file_info['id']}/view",
-                        "exif":        {},
-                    })
+                    continue
+
+                if not file_info.get("mimeType", "").startswith("image/"):
+                    continue
+
+                meta = file_info.get("imageMediaMetadata") or {}
+                loc  = meta.get("location") or {}
+                eklenenler.append({
+                    "id":          file_info["id"],
+                    "name":        file_info["name"],
+                    "size":        int(file_info.get("size") or 0),
+                    "folder_path": "/".join(file_info.get("parents") or []),
+                    "drive_url":   file_info.get("webViewLink", ""),
+                    "exif": {
+                        "date_taken":   meta.get("time"),
+                        "year":         int(meta["time"][:4]) if meta.get("time") else None,
+                        "month":        int(meta["time"][5:7]) if meta.get("time") else None,
+                        "lat":          loc.get("latitude"),
+                        "lon":          loc.get("longitude"),
+                        "camera_make":  meta.get("cameraMake"),
+                        "camera_model": meta.get("cameraModel"),
+                    },
+                })
 
             if "nextPageToken" in response:
                 current_token = response["nextPageToken"]
