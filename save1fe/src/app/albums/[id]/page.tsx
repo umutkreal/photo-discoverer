@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
-import Sidebar, { SIDEBAR_WIDTH } from "@/components/common/Sidebar";
+import Navbar from "@/components/common/Navbar";
 import { albumApi, thumbnailUrl, SOURCE_CONFIG } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import type { Album, AlbumPhoto, SourceKey } from "@/lib/api";
@@ -152,12 +152,12 @@ export default function AlbumDetailPage() {
 
   if (loading || !user || fetching) {
     return (
-      <div style={{ display: "flex", minHeight: "100vh" }}>
-        <Sidebar />
-        <div style={{ flex: 1, marginLeft: SIDEBAR_WIDTH, display: "flex", justifyContent: "center", paddingTop: 120 }}>
+      <>
+        <Navbar />
+        <div style={{ display: "flex", justifyContent: "center", paddingTop: 160 }}>
           <div style={{ width: 40, height: 40, border: "3px solid var(--border)", borderTop: "3px solid var(--accent)", borderRadius: "50%", animation: "spin-slow 0.8s linear infinite" }} />
         </div>
-      </div>
+      </>
     );
   }
 
@@ -165,9 +165,9 @@ export default function AlbumDetailPage() {
   const photos = album.photos;
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh" }}>
-      <Sidebar />
-      <main style={{ flex: 1, marginLeft: SIDEBAR_WIDTH, minWidth: 0, padding: "40px 40px 60px", maxWidth: 1100 }}>
+    <>
+      <Navbar />
+      <main style={{ paddingTop: 96, paddingBottom: 60, maxWidth: 1100, margin: "0 auto", padding: "96px 24px 60px" }}>
         {/* Header */}
         <div className="animate-fade-in" style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 32, gap: 16, flexWrap: "wrap" }}>
           <div>
@@ -267,6 +267,6 @@ export default function AlbumDetailPage() {
       {viewMode === "lightbox" && photos.length > 0 && (
         <Lightbox photos={photos} initialIndex={lightboxIdx} onClose={() => setViewMode("grid")} onRemove={handleRemove} />
       )}
-    </div>
+    </>
   );
 }

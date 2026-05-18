@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import Sidebar, { SIDEBAR_WIDTH } from "@/components/common/Sidebar";
+import Navbar from "@/components/common/Navbar";
 import { photoApi, thumbnailUrl, SOURCE_CONFIG } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import type { DuplicatePhoto, SourceKey } from "@/lib/api";
@@ -374,9 +374,9 @@ export default function DuplicatesPage() {
   if (loading || !user) return null;
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh" }}>
-      <Sidebar />
-      <main style={{ flex: 1, marginLeft: SIDEBAR_WIDTH, minWidth: 0, padding: "40px 40px 60px", maxWidth: 900 }}>
+    <>
+      <Navbar />
+      <main style={{ paddingTop: 96, paddingBottom: 60, maxWidth: 900, margin: "0 auto", padding: "96px 24px 60px" }}>
         {/* Header */}
         <div className="animate-fade-in" style={{ marginBottom: 28 }}>
           <h1 style={{ fontFamily: "var(--font-display)", fontSize: "2.2rem", fontWeight: 800, letterSpacing: "-0.03em", color: "var(--text)", marginBottom: 6 }}>
@@ -501,6 +501,6 @@ export default function DuplicatesPage() {
           </div>
         )}
       </main>
-    </div>
+    </>
   );
 }

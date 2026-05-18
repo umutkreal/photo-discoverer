@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import Sidebar, { SIDEBAR_WIDTH } from "@/components/common/Sidebar";
+import Navbar from "@/components/common/Navbar";
 import { searchApi, albumApi, thumbnailUrl, SOURCE_CONFIG } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import type { PhotoResult, SourceKey, SearchFilters, StatsResponse, Album } from "@/lib/api";
@@ -499,13 +499,13 @@ export default function SearchPage() {
   if (loading || !user) return null;
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh" }}>
-      <Sidebar />
-      <main style={{ flex: 1, marginLeft: SIDEBAR_WIDTH, minWidth: 0, minHeight: "100vh" }}>
+    <>
+      <Navbar />
+      <main style={{ paddingTop: 80, minHeight: "100vh" }}>
         {/* Search header */}
         <div style={{
           padding: "32px 24px 20px", borderBottom: "1px solid var(--border)",
-          background: "var(--bg)", position: "sticky", top: 0, zIndex: 40,
+          background: "var(--bg)", position: "sticky", top: 64, zIndex: 40,
         }}>
           <div style={{ maxWidth: 720, margin: "0 auto" }}>
             <form onSubmit={handleSubmit}>
@@ -699,6 +699,6 @@ export default function SearchPage() {
 
       {selectedPhoto && <PhotoModal photo={selectedPhoto} onClose={() => setSelectedPhoto(null)} />}
       {showToast && <SyncWarningToast onDismiss={() => setShowToast(false)} />}
-    </div>
+    </>
   );
 }

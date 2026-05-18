@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import Sidebar, { SIDEBAR_WIDTH } from "@/components/common/Sidebar";
+import Navbar from "@/components/common/Navbar";
 import { integrationApi, authApi, SOURCE_CONFIG } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import type { IntegrationsResponse, SourceKey } from "@/lib/api";
@@ -320,9 +320,9 @@ export default function IntegrationsPage() {
   const sources: SourceKey[] = ["gdrive", "dropbox", "pcloud", "onedrive"];
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh" }}>
-      <Sidebar />
-      <main style={{ flex: 1, marginLeft: SIDEBAR_WIDTH, minWidth: 0, padding: "40px 40px 60px", maxWidth: 720 }}>
+    <>
+      <Navbar />
+      <main style={{ paddingTop: 96, paddingBottom: 60, maxWidth: 720, margin: "0 auto", padding: "96px 24px 60px" }}>
         <div className="animate-fade-in" style={{ marginBottom: 40 }}>
           <h1 style={{
             fontFamily: "var(--font-display)", fontSize: "2.2rem",
@@ -392,6 +392,6 @@ export default function IntegrationsPage() {
           </p>
         </div>
       )}
-    </div>
+    </>
   );
 }

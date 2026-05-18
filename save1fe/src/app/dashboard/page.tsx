@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import Sidebar, { SIDEBAR_WIDTH } from "@/components/common/Sidebar";
+import Navbar from "@/components/common/Navbar";
 import { indexApi, syncApi } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import type { IndexResult, SyncResult } from "@/lib/api";
@@ -63,9 +63,9 @@ export default function DashboardPage() {
   if (loading || !user) return null;
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh" }}>
-      <Sidebar />
-      <main style={{ flex: 1, marginLeft: SIDEBAR_WIDTH, minWidth: 0, padding: "40px 40px 60px", maxWidth: 760 }}>
+    <>
+      <Navbar />
+      <main style={{ paddingTop: 96, paddingBottom: 60, maxWidth: 760, margin: "0 auto", padding: "96px 24px 60px" }}>
         {/* Header */}
         <div className="animate-fade-in" style={{ marginBottom: 48 }}>
           <h1
@@ -199,7 +199,7 @@ export default function DashboardPage() {
           )}
         </Section>
       </main>
-    </div>
+    </>
   );
 }
 

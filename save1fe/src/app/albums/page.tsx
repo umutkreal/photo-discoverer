@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import Sidebar, { SIDEBAR_WIDTH } from "@/components/common/Sidebar";
+import Navbar from "@/components/common/Navbar";
 import { albumApi } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import type { Album } from "@/lib/api";
@@ -54,9 +54,9 @@ export default function AlbumsPage() {
   if (loading || !user) return null;
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh" }}>
-      <Sidebar />
-      <main style={{ flex: 1, marginLeft: SIDEBAR_WIDTH, minWidth: 0, padding: "40px 40px 60px", maxWidth: 860 }}>
+    <>
+      <Navbar />
+      <main style={{ paddingTop: 96, paddingBottom: 60, maxWidth: 860, margin: "0 auto", padding: "96px 24px 60px" }}>
         {/* Header */}
         <div className="animate-fade-in" style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 36, flexWrap: "wrap", gap: 12 }}>
           <div>
@@ -191,6 +191,6 @@ export default function AlbumsPage() {
           </div>
         )}
       </main>
-    </div>
+    </>
   );
 }
