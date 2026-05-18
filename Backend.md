@@ -804,6 +804,7 @@ Dropbox API, dosya metadata'sında EXIF bilgisi döndürmez. Dropbox'tan indexle
 
 ### Tek Sunucu Sınırlılığı
 
+
 `_dropbox_states`, `_pcloud_states`, `_onedrive_states` ve `_flow` (Google) tüm global Python değişkenleridir. Birden fazla gunicorn worker veya load balancer durumunda state paylaşılmaz — OAuth akışları çakışır. **Çözüm planı:** Redis session store.
 
 ### Thumbnail Proxy Bant Genişliği

@@ -24,43 +24,46 @@ class OneDriveProvider(BaseProvider):
         return resp.json()
 
     def fotograflari_listele(self, klasor_id=None, limit=100):
-        # Search yerine delta kullan — tüm dosyaları tarar
-        url = f"{GRAPH}/me/drive/root/delta"
-        params = {
-            "$select": "id,name,size,webUrl,parentReference,photo,location,file,deleted",
-            "$top": 200,
-        }
-
         dosyalar = []
+        # Taranacak klasör kuyruğu — item ID veya "root"
+        kuyruk = [klasor_id or "root"]
 
-        while len(dosyalar) < limit:
-            data = self._get(url, **params)
-            for item in data.get("value", []):
-                if item.get("deleted"):
-                    continue
-                mime = item.get("file", {}).get("mimeType", "")
-                if not (item.get("photo") or mime.startswith("image/")):
-                    continue
-                photo    = item.get("photo") or {}
-                location = item.get("location") or {}
-                dosyalar.append({
-                    "id":          item["id"],
-                    "name":        item["name"],
-                    "size":        item.get("size", 0),
-                    "folder_path": (item.get("parentReference") or {}).get("path", ""),
-                    "drive_url":   item.get("webUrl", ""),
-                    "exif": {
-                        "date_taken": photo.get("takenDateTime"),
-                        "lat":        location.get("latitude"),
-                        "lon":        location.get("longitude"),
-                    },
-                })
+        while kuyruk and len(dosyalar) < limit:
+            folder = kuyruk.pop(0)
+            url = f"{GRAPH}/me/drive/items/{folder}/children" if folder != "root" else f"{GRAPH}/me/drive/root/children"
+            params = {
+                "$select": "id,name,size,webUrl,parentReference,photo,location,file,folder",
+                "$top": 200,
+            }
 
-            next_link = data.get("@odata.nextLink")
-            if not next_link or len(dosyalar) >= limit:
-                break
-            url    = next_link
-            params = {}
+            while url and len(dosyalar) < limit:
+                data = self._get(url, **params)
+                for item in data.get("value", []):
+                    if item.get("folder"):
+                        kuyruk.append(item["id"])
+                        continue
+                    mime = item.get("file", {}).get("mimeType", "")
+                    if not (item.get("photo") or mime.startswith("image/")):
+                        continue
+                    photo    = item.get("photo") or {}
+                    location = item.get("location") or {}
+                    dosyalar.append({
+                        "id":          item["id"],
+                        "name":        item["name"],
+                        "size":        item.get("size", 0),
+                        "folder_path": (item.get("parentReference") or {}).get("path", ""),
+                        "drive_url":   item.get("webUrl", ""),
+                        "exif": {
+                            "date_taken": photo.get("takenDateTime"),
+                            "lat":        location.get("latitude"),
+                            "lon":        location.get("longitude"),
+                        },
+                    })
+                next_link = data.get("@odata.nextLink")
+                if not next_link or len(dosyalar) >= limit:
+                    break
+                url    = next_link
+                params = {}
 
         return dosyalar[:limit]
 
@@ -84,9 +87,11 @@ class OneDriveProvider(BaseProvider):
 
         while url:
             data = self._get(url)
-
+            print(f"  🔍 [DEBUG] delta response value count: {len(data.get('value', []))}")
             for item in data.get("value", []):
+                print(f"  🔍 [DEBUG] item keys: {list(item.keys())}, deleted: {item.get('deleted')}")
                 if item.get("deleted"):
+                    print(f"RAW DELETED ITEM: {item}")
                     silinenler.append(item["id"])
                 elif item.get("photo") or (item.get("file", {}).get("mimeType", "")).startswith("image/"):
                     photo    = item.get("photo") or {}
@@ -106,7 +111,9 @@ class OneDriveProvider(BaseProvider):
 
             if "@odata.deltaLink" in data:
                 yeni_token = data["@odata.deltaLink"]
+                print(f"  🔍 [DEBUG] deltaLink bulundu, token güncellendi")
                 break
+            print(f"  🔍 [DEBUG] deltaLink yok, nextLink: {bool(data.get('@odata.nextLink'))}")
             url = data.get("@odata.nextLink")
 
         return eklenenler, silinenler, yeni_token
@@ -128,7 +135,7 @@ class OneDriveProvider(BaseProvider):
         # Tüm sayfaları büyük $top ile hızlıca geçerek deltaLink'e ulaş
         data = self._get(
             f"{GRAPH}/me/drive/root/delta",
-            **{"$select": "id", "$top": "500"},
+            **{"$top": "500"},
         )
         while "@odata.nextLink" in data:
             data = self._get(data["@odata.nextLink"])

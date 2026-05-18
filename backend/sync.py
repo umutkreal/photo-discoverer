@@ -66,9 +66,23 @@ def index_all(qdrant_client, col_name, email, all_credentials: dict, limit=500, 
                 all_errors.append({"source": source, "file": foto.get("name", "?"), "error": str(e)})
                 print(f"  ❌ [{source}] {foto.get('name', '?')}: {e}")
 
+        # Tüm download'lardan SONRA token al — T_start'ı hemen tüket, T1'i kaydet
         try:
+            # TEST BAŞLANGICI
+            print(f"  🧪 [{source}] baslangic_token_al çağrılıyor...")
+            # TEST SONU
             token = provider.baslangic_token_al()
-            page_token_kaydet(email, source, token)
+            # TEST BAŞLANGICI
+            print(f"  🧪 [{source}] token döndü: {bool(token)} — {str(token)[:80]}")
+            # TEST SONU
+
+            # T_start tüketilir — dönen eklenenler/silinenler atılır (index_all zaten indexledi)
+            _, _, gelismis_token = provider.degisiklikleri_getir(token)
+            # TEST BAŞLANGICI
+            print(f"  🧪 [{source}] gelişmiş token: {bool(gelismis_token)} — {str(gelismis_token)[:80]}")
+            # TEST SONU
+
+            page_token_kaydet(email, source, gelismis_token)
         except Exception as e:
             print(f"  ⚠️ [{source}] başlangıç token alınamadı: {e}")
 
@@ -89,6 +103,17 @@ def delta_sync(qdrant_client, col_name, email, all_credentials: dict):
     all_errors = []
     herhangi_token_var = False
 
+    # TEST BAŞLANGICI
+    print(f"\n{'='*50}")
+    print(f"🧪 DELTA SYNC DEBUG")
+    print(f"{'='*50}")
+    for source, creds in all_credentials.items():
+        saved_token = page_token_getir(email, source)
+        print(f"  [{source}] token var mı: {bool(saved_token)}")
+        print(f"  [{source}] token değeri: {str(saved_token)[:80] if saved_token else 'YOK'}")
+    print(f"{'='*50}\n")
+    # TEST SONU
+
     for source, creds in all_credentials.items():
         saved_token = page_token_getir(email, source)
         if not saved_token:  # None veya boş string
@@ -101,21 +126,30 @@ def delta_sync(qdrant_client, col_name, email, all_credentials: dict):
 
         try:
             eklenenler, silinenler, yeni_token = provider.degisiklikleri_getir(saved_token)
+            # TEST BAŞLANGICI
+            print(f"  🧪 [{source}] eklenenler={len(eklenenler)}, silinenler={len(silinenler)}, yeni_token={bool(yeni_token)}")
+            # TEST SONU
         except Exception as e:
             all_errors.append({"source": source, "error": f"Değişiklik alınamadı: {e}"})
             print(f"  ❌ [{source}] değişiklik hatası: {e}")
             continue
 
+        # Delta'dan gelen silmeler
         if silinenler:
             try:
                 toplu_fotograf_sil(qdrant_client, col_name, silinenler)
                 deleted += len(silinenler)
-                print(f"  🗑️ [{source}] {len(silinenler)} fotoğraf silindi")
+                print(f"  🗑️ [{source}] delta: {len(silinenler)} fotoğraf silindi")
             except Exception as e:
                 all_errors.append({"source": source, "action": "silme", "error": str(e)})
 
+        # Eklenenler — Qdrant'ta zaten var olanları atla
         for foto in eklenenler:
             try:
+                point_id = file_id_to_point_id(foto["id"])
+                if qdrant_client.retrieve(collection_name=col_name, ids=[point_id]):
+                    print(f"  ⏭️ [{source}] Zaten mevcut, atlanıyor: {foto.get('name', foto['id'])}")
+                    continue
                 image = provider.foto_indir(foto["id"])
                 vektor = foto_vektore_cevir(image)
                 fotograf_kaydet(qdrant_client, col_name, vektor, foto, source)
@@ -124,6 +158,27 @@ def delta_sync(qdrant_client, col_name, email, all_credentials: dict):
             except Exception as e:
                 all_errors.append({"source": source, "file": foto.get("name", "?"), "error": str(e)})
                 print(f"  ❌ [{source}] {foto.get('name', '?')}: {e}")
+
+        # Reconciliation: delta'nın kaçırdığı silmeleri yakala
+        # Provider'ın güncel listesiyle Qdrant'ı karşılaştır
+        try:
+            provider_fotolar = provider.fotograflari_listele(limit=5000)
+            provider_idler = {f["id"] for f in provider_fotolar}
+            mevcut_points, _ = qdrant_client.scroll(
+                collection_name=col_name, limit=5000,
+                with_payload=True, with_vectors=False,
+            )
+            kayip_idler = [
+                r.payload["file_id"] for r in mevcut_points
+                if r.payload.get("source") == source
+                and r.payload.get("file_id") not in provider_idler
+            ]
+            if kayip_idler:
+                toplu_fotograf_sil(qdrant_client, col_name, kayip_idler)
+                deleted += len(kayip_idler)
+                print(f"  🗑️ [{source}] reconciliation: {len(kayip_idler)} kayıp dosya temizlendi")
+        except Exception as e:
+            print(f"  ⚠️ [{source}] reconciliation hatası: {e}")
 
         page_token_kaydet(email, source, yeni_token)
 

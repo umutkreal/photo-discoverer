@@ -41,9 +41,10 @@ function SyncWarningToast({ onDismiss }: { onDismiss: () => void }) {
 // ─── Source filter pills ──────────────────────────────────────
 
 const SOURCES: { key: SourceKey | null; label: string }[] = [
-  { key: null,      label: "Tümü"         },
-  { key: "gdrive",  label: "Google Drive" },
-  { key: "dropbox", label: "Dropbox"      },
+  { key: null,       label: "Tümü"         },
+  { key: "gdrive",   label: "Google Drive" },
+  { key: "dropbox",  label: "Dropbox"      },
+  { key: "onedrive", label: "OneDrive"     },
 ];
 
 // ─── EXIF filter panel ────────────────────────────────────────
