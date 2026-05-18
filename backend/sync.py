@@ -68,20 +68,8 @@ def index_all(qdrant_client, col_name, email, all_credentials: dict, limit=500, 
 
         # Tüm download'lardan SONRA token al — T_start'ı hemen tüket, T1'i kaydet
         try:
-            # TEST BAŞLANGICI
-            print(f"  🧪 [{source}] baslangic_token_al çağrılıyor...")
-            # TEST SONU
             token = provider.baslangic_token_al()
-            # TEST BAŞLANGICI
-            print(f"  🧪 [{source}] token döndü: {bool(token)} — {str(token)[:80]}")
-            # TEST SONU
-
-            # T_start tüketilir — dönen eklenenler/silinenler atılır (index_all zaten indexledi)
             _, _, gelismis_token = provider.degisiklikleri_getir(token)
-            # TEST BAŞLANGICI
-            print(f"  🧪 [{source}] gelişmiş token: {bool(gelismis_token)} — {str(gelismis_token)[:80]}")
-            # TEST SONU
-
             page_token_kaydet(email, source, gelismis_token)
         except Exception as e:
             print(f"  ⚠️ [{source}] başlangıç token alınamadı: {e}")
@@ -103,17 +91,6 @@ def delta_sync(qdrant_client, col_name, email, all_credentials: dict):
     all_errors = []
     herhangi_token_var = False
 
-    # TEST BAŞLANGICI
-    print(f"\n{'='*50}")
-    print(f"🧪 DELTA SYNC DEBUG")
-    print(f"{'='*50}")
-    for source, creds in all_credentials.items():
-        saved_token = page_token_getir(email, source)
-        print(f"  [{source}] token var mı: {bool(saved_token)}")
-        print(f"  [{source}] token değeri: {str(saved_token)[:80] if saved_token else 'YOK'}")
-    print(f"{'='*50}\n")
-    # TEST SONU
-
     for source, creds in all_credentials.items():
         saved_token = page_token_getir(email, source)
         if not saved_token:  # None veya boş string
@@ -126,9 +103,6 @@ def delta_sync(qdrant_client, col_name, email, all_credentials: dict):
 
         try:
             eklenenler, silinenler, yeni_token = provider.degisiklikleri_getir(saved_token)
-            # TEST BAŞLANGICI
-            print(f"  🧪 [{source}] eklenenler={len(eklenenler)}, silinenler={len(silinenler)}, yeni_token={bool(yeni_token)}")
-            # TEST SONU
         except Exception as e:
             all_errors.append({"source": source, "error": f"Değişiklik alınamadı: {e}"})
             print(f"  ❌ [{source}] değişiklik hatası: {e}")

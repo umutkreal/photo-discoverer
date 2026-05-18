@@ -87,11 +87,8 @@ class OneDriveProvider(BaseProvider):
 
         while url:
             data = self._get(url)
-            print(f"  🔍 [DEBUG] delta response value count: {len(data.get('value', []))}")
             for item in data.get("value", []):
-                print(f"  🔍 [DEBUG] item keys: {list(item.keys())}, deleted: {item.get('deleted')}")
                 if item.get("deleted"):
-                    print(f"RAW DELETED ITEM: {item}")
                     silinenler.append(item["id"])
                 elif item.get("photo") or (item.get("file", {}).get("mimeType", "")).startswith("image/"):
                     photo    = item.get("photo") or {}
@@ -111,9 +108,7 @@ class OneDriveProvider(BaseProvider):
 
             if "@odata.deltaLink" in data:
                 yeni_token = data["@odata.deltaLink"]
-                print(f"  🔍 [DEBUG] deltaLink bulundu, token güncellendi")
                 break
-            print(f"  🔍 [DEBUG] deltaLink yok, nextLink: {bool(data.get('@odata.nextLink'))}")
             url = data.get("@odata.nextLink")
 
         return eklenenler, silinenler, yeni_token
