@@ -1,9 +1,10 @@
-# Photo Discovery — Proje Teknik Dokümantasyonu
+# PhotoMind — Proje Teknik Dokümantasyonu
 
-> **Proje:** AI Tabanlı Akıllı Fotoğraf Arama Asistanı
+> **Proje:** AI Tabanlı Cross-Cloud Fotoğraf Yöneticisi
+> **UI Adı:** PhotoMind — Cross-Cloud Image Manager
 > **Geliştirici:** Umut Kuzyaka
 > **Son Güncelleme:** Mayıs 2026
-> **Mevcut Durum:** Backend ✅ | Frontend ✅ | OneDrive ✅ | Dropbox ✅ | pCloud ⏳ (credentials bekleniyor)
+> **Mevcut Durum:** Backend ✅ | Frontend ✅ | Google Drive ✅ | Dropbox ✅ | OneDrive ✅ (delta sync tam çalışıyor) | pCloud ⏳ (credentials bekleniyor)
 
 ---
 
@@ -137,7 +138,10 @@ token_store'dan tüm bağlı provider credentials'larını al
        fotograf_kaydet() → Qdrant upsert (deterministik ID)
            │
            ▼
-     baslangic_token_al() → page token kaydet (delta sync için)
+     [Tüm download'lar bitti]
+     baslangic_token_al() → T_start al
+     degisiklikleri_getir(T_start) → T_start'ı tüket → T1 al
+     page_token_kaydet(T1)  ← delta sync bu noktadan başlar
            │
            ▼
      {"indexed": N, "total_found": M, "errors": [...]}
@@ -161,9 +165,14 @@ Her provider için:
            └── silinenler (silinen/çöpe atılan dosyaların ID'leri)
                  │
                  ├── silinenler → toplu_fotograf_sil(Qdrant)
-                 └── eklenenler → foto_indir → CLIP → fotograf_kaydet
-                       │
-                       ▼
+                 └── eklenenler → Qdrant existence check →
+                       zaten varsa atla / yoksa foto_indir → CLIP → fotograf_kaydet
+                           │
+                           ▼
+                 Reconciliation pass: provider listesi vs Qdrant karşılaştır
+                   → delta'nın kaçırdığı silmeler → toplu_fotograf_sil
+                           │
+                           ▼
                  page_token_kaydet(email, source, yeni_token)
 ```
 
@@ -336,12 +345,19 @@ EXIF alanları (year, month, lat, lon, camera_make, camera_model) sadece varsa p
 ### `sync.py`
 
 **`index_all()`:** Tüm bağlı provider'ları sıralı olarak tam indexler. Her provider için:
-1. Fotoğrafları listele
-2. Hayalet kayıtları temizle (Qdrant'ta var ama provider'da yok)
+1. Fotoğrafları listele (`fotograflari_listele`)
+2. Hayalet kayıtları temizle — Qdrant'ta var ama provider'da olmayan kayıtları sil
 3. Her fotoğrafı indir → CLIP → Qdrant upsert
-4. Başlangıç page token kaydet
+4. Tüm download'lar tamamlandıktan **sonra** `baslangic_token_al()` çağır
+5. T_start token'ını hemen `degisiklikleri_getir(T_start)` ile tüket → T1 token'ını kaydet
+
+> **Önemli:** Token, download'lardan *sonra* alınır; böylece `foto_indir` çağrılarının tetiklediği cTag güncellemeleri delta'ya girmez. T_start hemen tüketilerek T1 (gerçek fark noktası) kaydedilir.
 
 **`delta_sync()`:** Kaydedilmiş page token'ı olan her provider için `degisiklikleri_getir()` çağırır, eklenen/silinenleri işler, yeni token'ı kaydeder. Hiçbir provider için token yoksa `None` döner (henüz index yapılmamış).
+
+Delta sync iki güvenlik katmanı içerir:
+- **Qdrant existence check:** Eklenenler listesindeki her fotoğraf için `qdrant_client.retrieve()` ile Qdrant'ta var mı kontrol edilir — varsa re-embedding atlanır.
+- **Reconciliation pass:** Provider'ın güncel dosya listesi ile Qdrant karşılaştırılır; delta'nın kaçırdığı silmeler bu şekilde yakalanır.
 
 ---
 
@@ -415,15 +431,20 @@ Her dict şu alanları içermeli: `id`, `name`, `size`, `folder_path`, `drive_ur
 ### `OneDriveProvider`
 
 - **API:** Microsoft Graph REST API (`https://graph.microsoft.com/v1.0`)
-- **Kimlik:** `{"access_token": "...", "refresh_token": "..."}` dict — sadece `access_token` kullanılır (yenileme henüz yok)
-- **Fotoğraf listeleme:** `GET /me/drive/root/delta` — tüm drive'ı tarar, `photo` alanı olan veya `mimeType: image/*` olanları alır; `deleted` olanlar atlanır; `$top=200` ile sayfalama
+- **Kimlik:** `{"access_token": "...", "refresh_token": "..."}` dict — factory sadece `access_token`'ı provider'a iletir
+- **Fotoğraf listeleme:** BFS (breadth-first) `/me/drive/root/children` traversali — kök klasörden başlayıp alt klasörleri sıraya ekleyerek recursive tarar. `photo` alanı veya `mimeType: image/*` kontrolü ile sadece görseller alınır. **Not:** Delta endpoint (`/me/drive/root/delta`) bilinçli olarak kullanılmaz — delta token durumunu bozmamak için.
 - **İndirme:** `GET /me/drive/items/{file_id}/content` (follow_redirects=True)
 - **EXIF:** `photo.takenDateTime`, `location.latitude/longitude`
-- **Delta:** `degisiklikleri_getir(deltaLink)` — deltaLink bir URL'dir, kendisi doğrudan istek atılır; `@odata.deltaLink` yeni token
-- **Başlangıç token:** `GET /me/drive/root/delta` tüm sayfaları tüketir, son `deltaLink`'i döner
+- **Delta:** `degisiklikleri_getir(deltaLink)` — deltaLink bir URL'dir, kendisi doğrudan istek atılır; `@odata.deltaLink` yeni token. `deleted` objeleri silinmiş dosyaları bildirir.
+- **Başlangıç token:** `baslangic_token_al()` → `GET /me/drive/root/delta` tüm sayfaları `$top=500` ile hızlıca tüketir, son `deltaLink`'i döner. `index_all` tüm download'lardan sonra bu fonksiyonu çağırır, ardından T_start'ı `degisiklikleri_getir` ile tüketip T1'i kaydeder (cTag kirlenmesi önlemi).
 - **Silme:** `DELETE /me/drive/items/{file_id}`
 
-**Önemli Not — Token Yenileme:** OneDrive access token'ı ~1 saat sonra sona erer. Refresh token saklanıyor ancak otomatik yenileme henüz implement edilmedi. Expire olunca kullanıcı yeniden OAuth yapmalıdır. Bu Phase 5B'de (Redis geçişi ile birlikte) çözülecek.
+**cTag Kirlenmesi Sorunu ve Çözümü:** `foto_indir` (`/content` endpoint) OneDrive'ın cTag'ini günceller. Delta API bu güncellemeyi "değişiklik" olarak raporlar — bu da silinmemiş dosyaların sürekli re-embed edilmesine yol açar. Üç katmanlı çözüm uygulandı:
+1. `baslangic_token_al` tüm download'lardan **sonra** çağrılır
+2. Elde edilen T_start hemen tüketilir (T1 kaydedilir), böylece cTag değişiklikleri delta'ya girmez
+3. `delta_sync` içinde Qdrant existence check: Qdrant'ta zaten olan fotoğraflar re-embed edilmez
+
+**Token Yenileme:** OneDrive access token ~1 saat sonra sona erer. `refresh_token` token_store'da saklanıyor ancak otomatik yenileme implement edilmedi. Expire olunca kullanıcı yeniden OAuth yapmalıdır. **Faz 5B'de** Redis ile birlikte token refresh middleware'i eklenecek.
 
 ---
 
@@ -660,7 +681,7 @@ Backend:
 ```
 frontend/src/
 ├── app/
-│   ├── page.tsx                    # Landing (login sayfası)
+│   ├── page.tsx                    # Landing — PhotoMind giriş sayfası (Google OAuth)
 │   ├── auth/callback/page.tsx      # OAuth callback işleyici
 │   ├── dashboard/page.tsx          # Index / Sync kontrol paneli
 │   ├── search/page.tsx             # Ana arama ekranı
@@ -672,7 +693,8 @@ frontend/src/
 │       └── integrations/page.tsx   # Provider bağlantı yönetimi
 ├── components/
 │   └── common/
-│       └── Navbar.tsx              # Navigasyon (Search, Albums, Dashboard, Settings)
+│       ├── Sidebar.tsx             # Sol sidebar navigasyon (Panel, Ara, Albümler, Yinelenenler, Entegrasyonlar + kullanıcı dropdown)
+│       └── Navbar.tsx              # (Eski horizontal navbar — artık kullanılmıyor, Sidebar.tsx ile değiştirildi)
 ├── hooks/
 │   └── useAuth.ts                  # JWT + user state yönetimi
 └── lib/
@@ -681,7 +703,7 @@ frontend/src/
 
 ### `page.tsx` — Landing
 
-Google OAuth login butonu. `/auth/login` → `auth_url` → `window.location.href` ile Google'a yönlendirir.
+Sade PhotoMind giriş ekranı: uygulama adı, "Cross-Cloud Image Manager" alt başlığı ve Google OAuth login butonu. `/auth/login` → `auth_url` → `window.location.href` ile Google'a yönlendirir.
 
 ### `auth/callback/page.tsx`
 
@@ -694,7 +716,7 @@ Backend'in redirect'inden dönen `access_token`, `email`, `name`, `picture` para
 ### `search/page.tsx`
 
 - CLIP tabanlı arama kutusu — metin gir, Enter veya buton
-- Source filtre pill'leri (Tümü / Google Drive / Dropbox / pCloud / OneDrive)
+- Source filtre pill'leri: **Tümü / Google Drive / Dropbox / OneDrive / pCloud**
 - EXIF filtre panel'i (yıl aralığı, kamera markası) — `/stats` endpoint'inden kamera listesi
 - 12'li sayfalama — "Daha fazla getir" butonu, append (replace değil)
 - PhotoModal — büyük görsel, EXIF bilgileri (tarih, GPS, kamera), albüme ekle, sil
@@ -749,7 +771,9 @@ onedriveLogin() → GET /auth/onedrive/login     → {auth_url}
 | **Faz 3** | Delta sync, EXIF filtresi, Next.js frontend | ✅ |
 | **Faz 4** | Dropbox entegrasyonu, provider factory pattern, album sistemi | ✅ |
 | **Faz 5A** | OneDrive + pCloud entegrasyonu | ✅ (pCloud test bekliyor) |
-| **Faz 5B** | Redis geçişi, OneDrive token yenileme | 🔜 Planlandı |
+| **Faz 5A+** | OneDrive delta sync düzeltmeleri (cTag kirlenmesi, BFS listing, reconciliation, T_start tüketimi) | ✅ |
+| **Faz 5B** | Redis geçişi, OneDrive/Dropbox token otomatik yenileme | 🔜 Planlandı |
+| **Faz 6** | PhotoMind UI yeniden tasarımı — sidebar layout, PhotoMind branding | ✅ |
 
 ---
 
@@ -790,9 +814,9 @@ Google için `.env` değil, `backend/credentials.json` kullanılır (Google Clou
 
 `token_store.py` Python dict kullanır. Sunucu restart olduğunda tüm credentials ve page token'lar kaybolur. Kullanıcıların yeniden OAuth yapması ve `/index` çalıştırması gerekir. **Çözüm planı:** Faz 5B'de Redis geçişi.
 
-### OneDrive Token Yenileme Yok
+### OneDrive Token Otomatik Yenileme Yok
 
-OneDrive access token ~1 saat sonra sona erer. `refresh_token` saklanıyor fakat otomatik yenileme implement edilmedi. Expire olduğunda `401` hatası döner. **Çözüm planı:** Faz 5B'de Redis ile birlikte token refresh middleware'i.
+OneDrive access token ~1 saat sonra sona erer. `refresh_token` token_store'da saklanıyor fakat `OneDriveProvider` sadece `access_token` ile başlatılır; otomatik yenileme implement edilmedi. Expire olduğunda Graph API `401` döner. **Çözüm planı:** Faz 5B'de Redis geçişi ile birlikte token refresh middleware'i.
 
 ### pCloud Test Edilmedi
 

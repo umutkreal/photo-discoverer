@@ -15,8 +15,8 @@ const dmSans = DM_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "PhotoSearch — Fotoğraflarını Kelimelerle Bul",
-  description: "Google Drive fotoğraflarını yapay zeka ile doğal dilde ara",
+  title: "PhotoMind — Cross-Cloud Image Manager",
+  description: "Google Drive, Dropbox, OneDrive ve pCloud fotoğraflarını yapay zeka ile doğal dilde ara",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

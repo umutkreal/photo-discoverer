@@ -10,6 +10,13 @@ import os
 import secrets
 import httpx as _httpx
 
+# --- For Modal Serverless AI  Model  Deployment ---
+import base64
+from io import BytesIO
+from pydantic import BaseModel
+from typing import Optional
+
+
 from auth import (
     oauth_flow_init, oauth_flow_fetch_token, get_user_info,
     pcloud_auth_url_olustur, pcloud_token_al,
@@ -797,3 +804,82 @@ def thumbnail(
             raise HTTPException(status_code=500, detail=f"OneDrive thumbnail hatası: {e}")
 
     raise HTTPException(status_code=400, detail=f"Thumbnail proxy desteklenmiyor: {source}")
+
+
+# =============================================================================
+# MODAL Serverless
+# =============================================================================
+
+# --- Request modeli ---
+class DuzenleRequest(BaseModel):
+    file_id: str
+    source: str                        # "gdrive" | "dropbox" | "onedrive" | "pcloud"
+    prompt: str                        # "arkaplanı sil", "gökyüzünü maviye çevir" vb.
+    file_id2: Optional[str] = None     # opsiyonel — ikinci referans fotoğraf
+    source2: Optional[str] = None
+    num_inference_steps: int = 40
+    guidance_scale: float = 1.0
+    true_cfg_scale: float = 4.0
+    seed: int = -1
+
+
+# --- Endpoint ---
+@app.post("/edit")
+async def foto_duzenle_endpoint(
+    istek: DuzenleRequest,
+    kullanici: dict = Depends(aktif_kullanici),
+    credentials: dict = Depends(kullanici_tum_credentials),
+):
+    """
+    Fotoğrafı cloud'dan indirir, Modal üzerinden Qwen-Image-Edit ile düzenler,
+    düzenlenmiş görseli base64 olarak döndürür.
+    """
+    import modal
+
+    # 1. Birinci fotoğrafı indir
+    provider = provider_getir(istek.source, credentials[istek.source])
+    try:
+        pil_image = provider.foto_indir(istek.file_id)
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Fotoğraf indirilemedi: {e}")
+
+    # PIL → base64
+    buf = BytesIO()
+    pil_image.save(buf, format="JPEG")
+    image_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+
+    # 2. Opsiyonel: ikinci fotoğraf
+    image2_b64 = None
+    if istek.file_id2 and istek.source2 and istek.source2 in credentials:
+        provider2 = provider_getir(istek.source2, credentials[istek.source2])
+        try:
+            pil_image2 = provider2.foto_indir(istek.file_id2)
+            buf2 = BytesIO()
+            pil_image2.save(buf2, format="JPEG")
+            image2_b64 = base64.b64encode(buf2.getvalue()).decode("utf-8")
+        except Exception:
+            pass  # ikinci fotoğraf opsiyonel, hata olursa devam et
+
+    # 3. Modal worker'ı çağır
+    try:
+        foto_duzenle = modal.Function.lookup(
+            "photomind-image-edit", "foto_duzenle"
+        )
+        sonuc = foto_duzenle.remote(
+            image_b64=image_b64,
+            prompt=istek.prompt,
+            image2_b64=image2_b64,
+            num_inference_steps=istek.num_inference_steps,
+            guidance_scale=istek.guidance_scale,
+            true_cfg_scale=istek.true_cfg_scale,
+            seed=istek.seed,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"AI servisi hatası: {e}")
+
+    return {
+        "image": sonuc["image"],       # base64 JPEG
+        "width": sonuc["width"],
+        "height": sonuc["height"],
+        "prompt": istek.prompt,
+    }
