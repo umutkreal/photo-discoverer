@@ -108,3 +108,25 @@ class PCloudProvider(BaseProvider):
         # last=1 → sadece güncel diffid'i döner, tüm history'yi indirmez
         resp = self._get("/diff", last=1, limit=0)
         return str(resp.get("diffid", "0"))
+
+    def foto_yukle(self, image_bytes: bytes, filename: str, folder: str = "PhotoMind-Edited") -> dict:
+        # Önce klasörü bul/oluştur
+        folder_resp = self._get("/createfolderifnotexists", path=f"/{folder}")
+        folder_id = folder_resp.get("metadata", {}).get("folderid", 0)
+
+        upload_resp = httpx.post(
+            f"{PCLOUD_URL}/uploadfile",
+            params={"access_token": self._token, "folderid": folder_id, "filename": filename},
+            files={"file": (filename, image_bytes, "image/jpeg")},
+            timeout=60,
+        )
+        upload_resp.raise_for_status()
+        data = upload_resp.json()
+        if data.get("result", 0) != 0:
+            raise RuntimeError(f"pCloud yükleme hatası: {data.get('error')}")
+        file_meta = data.get("metadata", [{}])[0] if data.get("metadata") else {}
+        return {
+            "id": str(file_meta.get("fileid", "")),
+            "name": file_meta.get("name", filename),
+            "drive_url": f"https://my.pcloud.com/#page=filemanager&path=/{folder}/{filename}",
+        }

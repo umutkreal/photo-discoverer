@@ -47,6 +47,13 @@ const IDuplicates = () => (
   </svg>
 );
 
+const IEdit = () => (
+  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <path d="M12 20h9"/>
+    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+  </svg>
+);
+
 const IIntegrations = () => (
   <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
     <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
@@ -88,6 +95,7 @@ const IChevron = () => (
 const NAV = [
   { href: "/dashboard",             label: "Panel",         Icon: IPanel         },
   { href: "/search",                label: "Ara",           Icon: ISearch        },
+  { href: "/edit",                  label: "AI Düzenle",    Icon: IEdit          },
   { href: "/albums",                label: "Albümler",      Icon: IAlbums        },
   { href: "/duplicates",            label: "Yinelenenler",  Icon: IDuplicates    },
   { href: "/settings/integrations", label: "Entegrasyonlar",Icon: IIntegrations  },

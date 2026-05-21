@@ -135,3 +135,19 @@ class OneDriveProvider(BaseProvider):
         while "@odata.nextLink" in data:
             data = self._get(data["@odata.nextLink"])
         return data.get("@odata.deltaLink", "")
+
+    def foto_yukle(self, image_bytes: bytes, filename: str, folder: str = "PhotoMind-Edited") -> dict:
+        url = f"{GRAPH}/me/drive/root:/{folder}/{filename}:/content"
+        resp = httpx.put(
+            url,
+            headers={**self._headers, "Content-Type": "image/jpeg"},
+            content=image_bytes,
+            timeout=60,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return {
+            "id": data.get("id", ""),
+            "name": data.get("name", filename),
+            "drive_url": data.get("webUrl", ""),
+        }

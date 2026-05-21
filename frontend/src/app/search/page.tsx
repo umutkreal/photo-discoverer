@@ -310,7 +310,7 @@ function PhotoCard({ photo, index, onClick }: { photo: PhotoResult; index: numbe
 
 // ─── Photo Modal ──────────────────────────────────────────────
 
-function PhotoModal({ photo, onClose }: { photo: PhotoResult; onClose: () => void }) {
+function PhotoModal({ photo, onClose, onEditClick }: { photo: PhotoResult; onClose: () => void; onEditClick: () => void }) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", handler);
@@ -408,6 +408,15 @@ function PhotoModal({ photo, onClose }: { photo: PhotoResult; onClose: () => voi
             }}>
               {openLabel}
             </a>
+            <button onClick={onEditClick} style={{
+              padding: "10px 16px", borderRadius: 10,
+              background: "linear-gradient(135deg, var(--accent), #a78bfa)",
+              border: "none", color: "white",
+              fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "0.9rem", cursor: "pointer",
+              whiteSpace: "nowrap",
+            }}>
+              AI Düzenle
+            </button>
             <button onClick={onClose} style={{
               padding: "10px 20px", borderRadius: 10,
               background: "var(--surface-2)", border: "1px solid var(--border)",
@@ -697,7 +706,16 @@ export default function SearchPage() {
         </div>
       </main>
 
-      {selectedPhoto && <PhotoModal photo={selectedPhoto} onClose={() => setSelectedPhoto(null)} />}
+      {selectedPhoto && (
+        <PhotoModal
+          photo={selectedPhoto}
+          onClose={() => setSelectedPhoto(null)}
+          onEditClick={() => {
+            const p = new URLSearchParams({ file_id: selectedPhoto.file_id, source: selectedPhoto.source });
+            router.push(`/edit?${p}`);
+          }}
+        />
+      )}
       {showToast && <SyncWarningToast onDismiss={() => setShowToast(false)} />}
     </div>
   );

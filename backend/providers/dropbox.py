@@ -94,3 +94,12 @@ class DropboxProvider(BaseProvider):
         # Tüm dosyaları atlayarak sadece cursor alır — indexleme sonrası delta başlangıcı.
         result = self.dbx.files_list_folder_get_latest_cursor("", recursive=True)
         return result.cursor
+
+    def foto_yukle(self, image_bytes: bytes, filename: str, folder: str = "PhotoMind-Edited") -> dict:
+        yol = f"/{folder}/{filename}"
+        meta = self.dbx.files_upload(image_bytes, yol, mode=dropbox.files.WriteMode.overwrite)
+        return {
+            "id": meta.id,
+            "name": meta.name,
+            "drive_url": f"https://www.dropbox.com/home/{folder}/{filename}",
+        }

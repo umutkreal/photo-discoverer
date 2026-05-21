@@ -16,7 +16,6 @@ from io import BytesIO
 from pydantic import BaseModel
 from typing import Optional
 
-
 from auth import (
     oauth_flow_init, oauth_flow_fetch_token, get_user_info,
     pcloud_auth_url_olustur, pcloud_token_al,
@@ -807,23 +806,18 @@ def thumbnail(
 
 
 # =============================================================================
-# MODAL Serverless
+# AI Image Edit
 # =============================================================================
 
-# --- Request modeli ---
 class DuzenleRequest(BaseModel):
-    file_id: str
-    source: str                        # "gdrive" | "dropbox" | "onedrive" | "pcloud"
-    prompt: str                        # "arkaplanı sil", "gökyüzünü maviye çevir" vb.
-    file_id2: Optional[str] = None     # opsiyonel — ikinci referans fotoğraf
+    file_id: Optional[str] = None      # cloud fotoğraf ID'si (source != "local" ise gerekli)
+    source: str                        # "gdrive" | "dropbox" | "onedrive" | "pcloud" | "local"
+    image_b64: Optional[str] = None    # source="local" ise tarayıcıdan gelen base64 görsel
+    prompt: str
+    file_id2: Optional[str] = None
     source2: Optional[str] = None
-    num_inference_steps: int = 40
-    guidance_scale: float = 1.0
-    true_cfg_scale: float = 4.0
-    seed: int = -1
 
 
-# --- Endpoint ---
 @app.post("/edit")
 async def foto_duzenle_endpoint(
     istek: DuzenleRequest,
@@ -831,55 +825,67 @@ async def foto_duzenle_endpoint(
     credentials: dict = Depends(kullanici_tum_credentials),
 ):
     """
-    Fotoğrafı cloud'dan indirir, Modal üzerinden Qwen-Image-Edit ile düzenler,
-    düzenlenmiş görseli base64 olarak döndürür.
+    Fotoğrafı cloud'dan ya da yerel yüklemeden alır, base64'e çevirir.
+    AI çağrısı TODO: yeni API buraya bağlanacak.
     """
-    import modal
-
-    # 1. Birinci fotoğrafı indir
-    provider = provider_getir(istek.source, credentials[istek.source])
-    try:
-        pil_image = provider.foto_indir(istek.file_id)
-    except Exception as e:
-        raise HTTPException(status_code=404, detail=f"Fotoğraf indirilemedi: {e}")
-
-    # PIL → base64
-    buf = BytesIO()
-    pil_image.save(buf, format="JPEG")
-    image_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
-
-    # 2. Opsiyonel: ikinci fotoğraf
-    image2_b64 = None
-    if istek.file_id2 and istek.source2 and istek.source2 in credentials:
-        provider2 = provider_getir(istek.source2, credentials[istek.source2])
+    # 1. Birinci fotoğrafı al
+    if istek.source == "local":
+        if not istek.image_b64:
+            raise HTTPException(status_code=400, detail="source='local' için image_b64 gerekli")
+        image_b64 = istek.image_b64
+    else:
+        src_creds = credentials.get("credentials", {}).get(istek.source) or credentials.get(istek.source)
+        if not src_creds:
+            raise HTTPException(status_code=400, detail=f"'{istek.source}' için bağlantı bulunamadı")
+        provider = provider_getir(istek.source, src_creds)
         try:
-            pil_image2 = provider2.foto_indir(istek.file_id2)
-            buf2 = BytesIO()
-            pil_image2.save(buf2, format="JPEG")
-            image2_b64 = base64.b64encode(buf2.getvalue()).decode("utf-8")
-        except Exception:
-            pass  # ikinci fotoğraf opsiyonel, hata olursa devam et
+            pil_image = provider.foto_indir(istek.file_id)
+        except Exception as e:
+            raise HTTPException(status_code=404, detail=f"Fotoğraf indirilemedi: {e}")
+        buf = BytesIO()
+        pil_image.save(buf, format="JPEG")
+        image_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
 
-    # 3. Modal worker'ı çağır
+    # 2. TODO: AI API çağrısı buraya gelecek
+    raise HTTPException(status_code=501, detail="AI düzenleme API'si henüz bağlanmadı")
+
+# =============================================================================
+# save on cloud for edited images
+# =============================================================================
+
+ 
+from pydantic import BaseModel
+from typing import Optional
+import base64
+ 
+class CloudSaveRequest(BaseModel):
+    image_b64: str           # Modal'dan dönen düzenlenmiş görsel (base64 JPEG)
+    filename: str            # "edited_IMG_2847.jpg"
+    source: str              # "gdrive" | "dropbox" | "onedrive" | "pcloud"
+    folder: str = "PhotoMind-Edited"
+
+
+@app.post("/saveOnCloud")
+async def buluta_kaydet(
+    istek: CloudSaveRequest,
+    kullanici: dict = Depends(aktif_kullanici),
+    credentials: dict = Depends(kullanici_tum_credentials),
+):
+    """Düzenlenmiş görseli seçili cloud provider'ına yükler."""
+    all_creds = credentials.get("credentials", credentials)
+    src_creds = all_creds.get(istek.source)
+    if not src_creds:
+        raise HTTPException(status_code=400, detail=f"'{istek.source}' bağlantısı bulunamadı")
+
     try:
-        foto_duzenle = modal.Function.lookup(
-            "photomind-image-edit", "foto_duzenle"
-        )
-        sonuc = foto_duzenle.remote(
-            image_b64=image_b64,
-            prompt=istek.prompt,
-            image2_b64=image2_b64,
-            num_inference_steps=istek.num_inference_steps,
-            guidance_scale=istek.guidance_scale,
-            true_cfg_scale=istek.true_cfg_scale,
-            seed=istek.seed,
-        )
-    except Exception as e:
-        raise HTTPException(status_code=503, detail=f"AI servisi hatası: {e}")
+        image_bytes = base64.b64decode(istek.image_b64)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Geçersiz base64 görsel")
 
-    return {
-        "image": sonuc["image"],       # base64 JPEG
-        "width": sonuc["width"],
-        "height": sonuc["height"],
-        "prompt": istek.prompt,
-    }
+    provider = provider_getir(istek.source, src_creds)
+    try:
+        meta = provider.foto_yukle(image_bytes, istek.filename, istek.folder)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Yükleme hatası: {e}")
+
+    return {"success": True, "file": meta}

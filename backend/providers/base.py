@@ -46,6 +46,14 @@ class BaseProvider(ABC):
         """
         pass
 
+    @abstractmethod
+    def foto_yukle(self, image_bytes: bytes, filename: str, folder: str = "PhotoMind-Edited") -> dict:
+        """
+        Düzenlenmiş fotoğrafı provider'a yükler, metadata döner:
+        { "id": str, "name": str, "drive_url": str }
+        """
+        pass
+
     @property
     @abstractmethod
     def source_key(self) -> str:

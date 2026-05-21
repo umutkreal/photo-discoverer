@@ -1,6 +1,6 @@
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload
+from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
 from PIL import Image
 import io
 from .base import BaseProvider
@@ -138,3 +138,24 @@ class GoogleDriveProvider(BaseProvider):
     def baslangic_token_al(self):
         response = self.service.changes().getStartPageToken().execute()
         return response.get("startPageToken")
+
+    def foto_yukle(self, image_bytes: bytes, filename: str, folder: str = "PhotoMind-Edited") -> dict:
+        # Klasörü bul ya da oluştur
+        q = f"mimeType='application/vnd.google-apps.folder' and name='{folder}' and trashed=false"
+        res = self.service.files().list(q=q, fields="files(id)").execute()
+        klasorler = res.get("files", [])
+        if klasorler:
+            folder_id = klasorler[0]["id"]
+        else:
+            meta = {"name": folder, "mimeType": "application/vnd.google-apps.folder"}
+            klasor = self.service.files().create(body=meta, fields="id").execute()
+            folder_id = klasor["id"]
+
+        media = MediaIoBaseUpload(io.BytesIO(image_bytes), mimetype="image/jpeg", resumable=False)
+        file_meta = {"name": filename, "parents": [folder_id]}
+        yuklu = self.service.files().create(body=file_meta, media_body=media, fields="id,name,webViewLink").execute()
+        return {
+            "id": yuklu["id"],
+            "name": yuklu["name"],
+            "drive_url": yuklu.get("webViewLink", ""),
+        }

@@ -210,6 +210,42 @@ export const albumApi = {
   },
 };
 
+// ─── AI Edit ───
+export interface EditRequest {
+  file_id?: string;
+  source: string;
+  image_b64?: string;
+  prompt: string;
+  file_id2?: string;
+  source2?: string;
+  num_inference_steps?: number;
+  guidance_scale?: number;
+  true_cfg_scale?: number;
+  seed?: number;
+}
+export interface EditResult {
+  image: string;   // base64 JPEG
+  width: number;
+  height: number;
+  prompt: string;
+}
+export interface CloudSaveRequest {
+  image_b64: string;
+  filename: string;
+  source: string;
+  folder?: string;
+}
+export interface CloudSaveResult {
+  success: boolean;
+  file: { id: string; name: string; drive_url: string };
+}
+export const editApi = {
+  edit: (body: EditRequest) =>
+    request<EditResult>("/edit", { method: "POST", body: JSON.stringify(body) }),
+  saveOnCloud: (body: CloudSaveRequest) =>
+    request<CloudSaveResult>("/saveOnCloud", { method: "POST", body: JSON.stringify(body) }),
+};
+
 // ─── Source config (shared UI helpers) ───
 export const SOURCE_CONFIG: Record<SourceKey, { label: string; color: string; bg: string }> = {
   gdrive:   { label: "Google Drive", color: "#4285F4", bg: "rgba(66,133,244,0.15)" },
