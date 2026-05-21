@@ -3,6 +3,7 @@
 @tailwind utilities;
 
 :root {
+  --sidebar-w: 240px;
   --bg: #0a0a0f;
   --surface: #111118;
   --surface-2: #1a1a24;
@@ -16,6 +17,17 @@
   --warning: #fbbf24;
   --font-display: var(--font-syne);
   --font-body: var(--font-dm);
+  --body: var(--font-dm), system-ui, sans-serif;
+  --mono: var(--font-mono), ui-monospace, monospace;
+
+  --bg-2:      #0d0d12;
+  --surface-3: #1a1a24;
+  --border-2:  #3a3a4a;
+  --dim:       #8888aa;
+  --dimmer:    #5a5a6e;
+  --violet:    #7c6dfa;
+  --violet-2:  #a78bfa;
+  --green:     #4ade80;
 }
 
 * {

@@ -56,7 +56,7 @@ export default function AlbumsPage() {
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
       <Sidebar />
-      <main style={{ flex: 1, marginLeft: SIDEBAR_WIDTH, minWidth: 0, padding: "40px 40px 60px", maxWidth: 860 }}>
+      <main style={{ flex: 1, marginLeft: "var(--sidebar-w)", transition: "margin-left 0.2s ease", minWidth: 0, padding: "40px 40px 60px", maxWidth: 860 }}>
         {/* Header */}
         <div className="animate-fade-in" style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 36, flexWrap: "wrap", gap: 12 }}>
           <div>

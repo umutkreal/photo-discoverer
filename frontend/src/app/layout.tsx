@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Syne, DM_Sans } from "next/font/google";
+import { Syne, DM_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
 const syne = Syne({
@@ -14,6 +14,12 @@ const dmSans = DM_Sans({
   weight: ["300", "400", "500"],
 });
 
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-mono",
+  weight: ["400", "500"],
+});
+
 export const metadata: Metadata = {
   title: "PhotoMind — Cross-Cloud Image Manager",
   description: "Google Drive, Dropbox, OneDrive ve pCloud fotoğraflarını yapay zeka ile doğal dilde ara",
@@ -21,7 +27,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="tr" className={`${syne.variable} ${dmSans.variable}`}>
+    <html lang="tr" className={`${syne.variable} ${dmSans.variable} ${jetbrainsMono.variable}`}>
       <body>{children}</body>
     </html>
   );

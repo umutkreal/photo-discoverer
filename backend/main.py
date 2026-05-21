@@ -1,20 +1,17 @@
 from fastapi import FastAPI, HTTPException, Request, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse, StreamingResponse
+from fastapi.responses import RedirectResponse
 from dotenv import load_dotenv
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
+import asyncio
+import base64
 import hashlib
 import io
+from io import BytesIO
 import os
 import secrets
 import httpx as _httpx
-
-# --- For Modal Serverless AI  Model  Deployment ---
-import base64
-from io import BytesIO
-from pydantic import BaseModel
-from typing import Optional
 
 from auth import (
     oauth_flow_init, oauth_flow_fetch_token, get_user_info,
@@ -33,6 +30,7 @@ from dependencies import aktif_kullanici, kullanici_tum_credentials
 from embedding import metin_vektore_cevir
 from qdrant_db import qdrant_baglanti, collection_olustur, fotograf_sil, duplikatlari_bul
 from providers.factory import provider_getir
+from edit_providers import edit_provider_getir, desteklenen_providerlar, EditIslemi, EditHatasi
 from sync import index_all, delta_sync
 from album_store import (
     init_db as album_db_init,
@@ -809,55 +807,102 @@ def thumbnail(
 # AI Image Edit
 # =============================================================================
 
-class DuzenleRequest(BaseModel):
-    file_id: Optional[str] = None      # cloud fotoğraf ID'si (source != "local" ise gerekli)
-    source: str                        # "gdrive" | "dropbox" | "onedrive" | "pcloud" | "local"
-    image_b64: Optional[str] = None    # source="local" ise tarayıcıdan gelen base64 görsel
-    prompt: str
-    file_id2: Optional[str] = None
-    source2: Optional[str] = None
+class EditIstek(BaseModel):
+    source:   str
+    file_id:  str             = ""
+    image_b64: Optional[str] = None   # local upload bypasses cloud download
+    edit_provider: str        = Field("replicate")
+    islem:    EditIslemi
+
+    prompt:        Optional[str]  = None
+    maske_b64:     Optional[str]  = None
+    guc:           float          = Field(0.85, ge=0.0, le=1.0)
+    yon:           str            = Field("right", pattern="^(left|right|up|down)$")
+    genisletme_px: int            = Field(256, ge=64, le=1024)
+    olcek:         int            = Field(2, ge=2, le=4)
+    aciklama:      str            = "Fix scratches, damage, and improve overall quality"
+
+
+@app.get("/edit/providers")
+async def edit_provider_listesi():
+    return desteklenen_providerlar()
 
 
 @app.post("/edit")
-async def foto_duzenle_endpoint(
-    istek: DuzenleRequest,
+async def fotograf_duzenle(
+    istek: EditIstek,
     kullanici: dict = Depends(aktif_kullanici),
-    credentials: dict = Depends(kullanici_tum_credentials),
 ):
-    """
-    Fotoğrafı cloud'dan ya da yerel yüklemeden alır, base64'e çevirir.
-    AI çağrısı TODO: yeni API buraya bağlanacak.
-    """
-    # 1. Birinci fotoğrafı al
-    if istek.source == "local":
-        if not istek.image_b64:
-            raise HTTPException(status_code=400, detail="source='local' için image_b64 gerekli")
-        image_b64 = istek.image_b64
-    else:
-        src_creds = credentials.get("credentials", {}).get(istek.source) or credentials.get(istek.source)
-        if not src_creds:
-            raise HTTPException(status_code=400, detail=f"'{istek.source}' için bağlantı bulunamadı")
-        provider = provider_getir(istek.source, src_creds)
+    from PIL import Image as PILImage
+
+    email = kullanici["email"]
+    loop = asyncio.get_event_loop()
+
+    # 1. Fotoğrafı yükle — yerel yükleme veya buluttan indir
+    if istek.image_b64:
         try:
-            pil_image = provider.foto_indir(istek.file_id)
+            img_bytes = base64.b64decode(istek.image_b64)
+            gorsel = PILImage.open(BytesIO(img_bytes)).convert("RGB")
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Geçersiz görsel verisi: {e}")
+    else:
+        creds = credentials_getir(email, istek.source)
+        if not creds:
+            return {"hata": f"'{istek.source}' bağlantısı bulunamadı. Önce entegrasyonlardan bağlanın."}
+        try:
+            cloud_provider = provider_getir(istek.source, creds)
+            gorsel = await loop.run_in_executor(None, cloud_provider.foto_indir, istek.file_id)
         except Exception as e:
             raise HTTPException(status_code=404, detail=f"Fotoğraf indirilemedi: {e}")
-        buf = BytesIO()
-        pil_image.save(buf, format="JPEG")
-        image_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
 
-    # 2. TODO: AI API çağrısı buraya gelecek
-    raise HTTPException(status_code=501, detail="AI düzenleme API'si henüz bağlanmadı")
+    # 2. Maske varsa decode et
+    maske = None
+    if istek.maske_b64:
+        maske_bytes = base64.b64decode(istek.maske_b64)
+        maske = PILImage.open(BytesIO(maske_bytes)).convert("L").resize(gorsel.size)
+
+    # 3. AI düzenleme
+    try:
+        edit_provider = edit_provider_getir(istek.edit_provider)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    try:
+        sonuc = await loop.run_in_executor(
+            None,
+            lambda: edit_provider.isle(
+                islem=istek.islem,
+                gorsel=gorsel,
+                maske=maske,
+                prompt=istek.prompt,
+                guc=istek.guc,
+                yon=istek.yon,
+                genisletme_px=istek.genisletme_px,
+                olcek=istek.olcek,
+                aciklama=istek.aciklama,
+            ),
+        )
+    except EditHatasi as e:
+        return {"hata": str(e)}
+
+    # 4. Sonucu base64'e çevir
+    buf = BytesIO()
+    sonuc.gorsel.save(buf, format="JPEG", quality=92)
+    w, h = sonuc.gorsel.size
+
+    return {
+        "sonuc_b64":     base64.b64encode(buf.getvalue()).decode(),
+        "mime_type":     "image/jpeg",
+        "islem":         istek.islem,
+        "edit_provider": istek.edit_provider,
+        "model":         sonuc.model,
+        "boyut":         {"genislik": w, "yukseklik": h},
+    }
 
 # =============================================================================
 # save on cloud for edited images
 # =============================================================================
 
- 
-from pydantic import BaseModel
-from typing import Optional
-import base64
- 
 class CloudSaveRequest(BaseModel):
     image_b64: str           # Modal'dan dönen düzenlenmiş görsel (base64 JPEG)
     filename: str            # "edited_IMG_2847.jpg"

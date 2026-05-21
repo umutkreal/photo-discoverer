@@ -510,7 +510,7 @@ export default function SearchPage() {
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
       <Sidebar />
-      <main style={{ flex: 1, marginLeft: SIDEBAR_WIDTH, minWidth: 0, minHeight: "100vh" }}>
+      <main style={{ flex: 1, marginLeft: "var(--sidebar-w)", transition: "margin-left 0.2s ease", minWidth: 0, minHeight: "100vh" }}>
         {/* Search header */}
         <div style={{
           padding: "32px 24px 20px", borderBottom: "1px solid var(--border)",

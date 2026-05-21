@@ -154,7 +154,7 @@ export default function AlbumDetailPage() {
     return (
       <div style={{ display: "flex", minHeight: "100vh" }}>
         <Sidebar />
-        <div style={{ flex: 1, marginLeft: SIDEBAR_WIDTH, display: "flex", justifyContent: "center", paddingTop: 120 }}>
+        <div style={{ flex: 1, marginLeft: "var(--sidebar-w)", transition: "margin-left 0.2s ease", display: "flex", justifyContent: "center", paddingTop: 120 }}>
           <div style={{ width: 40, height: 40, border: "3px solid var(--border)", borderTop: "3px solid var(--accent)", borderRadius: "50%", animation: "spin-slow 0.8s linear infinite" }} />
         </div>
       </div>
@@ -167,7 +167,7 @@ export default function AlbumDetailPage() {
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
       <Sidebar />
-      <main style={{ flex: 1, marginLeft: SIDEBAR_WIDTH, minWidth: 0, padding: "40px 40px 60px", maxWidth: 1100 }}>
+      <main style={{ flex: 1, marginLeft: "var(--sidebar-w)", transition: "margin-left 0.2s ease", minWidth: 0, padding: "40px 40px 60px", maxWidth: 1100 }}>
         {/* Header */}
         <div className="animate-fade-in" style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 32, gap: 16, flexWrap: "wrap" }}>
           <div>

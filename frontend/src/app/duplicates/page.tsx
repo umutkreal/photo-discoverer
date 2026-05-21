@@ -376,7 +376,7 @@ export default function DuplicatesPage() {
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
       <Sidebar />
-      <main style={{ flex: 1, marginLeft: SIDEBAR_WIDTH, minWidth: 0, padding: "40px 40px 60px", maxWidth: 900 }}>
+      <main style={{ flex: 1, marginLeft: "var(--sidebar-w)", transition: "margin-left 0.2s ease", minWidth: 0, padding: "40px 40px 60px", maxWidth: 900 }}>
         {/* Header */}
         <div className="animate-fade-in" style={{ marginBottom: 28 }}>
           <h1 style={{ fontFamily: "var(--font-display)", fontSize: "2.2rem", fontWeight: 800, letterSpacing: "-0.03em", color: "var(--text)", marginBottom: 6 }}>

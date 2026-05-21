@@ -211,23 +211,28 @@ export const albumApi = {
 };
 
 // ─── AI Edit ───
-export interface EditRequest {
-  file_id?: string;
+export interface NewEditRequest {
   source: string;
+  file_id: string;
   image_b64?: string;
-  prompt: string;
-  file_id2?: string;
-  source2?: string;
-  num_inference_steps?: number;
-  guidance_scale?: number;
-  true_cfg_scale?: number;
-  seed?: number;
+  edit_provider?: string;
+  islem: string;
+  prompt?: string;
+  maske_b64?: string;
+  guc?: number;
+  yon?: string;
+  genisletme_px?: number;
+  olcek?: number;
+  aciklama?: string;
 }
-export interface EditResult {
-  image: string;   // base64 JPEG
-  width: number;
-  height: number;
-  prompt: string;
+export interface NewEditResult {
+  sonuc_b64: string;
+  mime_type: string;
+  islem: string;
+  edit_provider: string;
+  model: string;
+  boyut: { genislik: number; yukseklik: number };
+  hata?: string;
 }
 export interface CloudSaveRequest {
   image_b64: string;
@@ -240,8 +245,8 @@ export interface CloudSaveResult {
   file: { id: string; name: string; drive_url: string };
 }
 export const editApi = {
-  edit: (body: EditRequest) =>
-    request<EditResult>("/edit", { method: "POST", body: JSON.stringify(body) }),
+  edit: (body: NewEditRequest) =>
+    request<NewEditResult>("/edit", { method: "POST", body: JSON.stringify(body) }),
   saveOnCloud: (body: CloudSaveRequest) =>
     request<CloudSaveResult>("/saveOnCloud", { method: "POST", body: JSON.stringify(body) }),
 };

@@ -65,7 +65,7 @@ export default function DashboardPage() {
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
       <Sidebar />
-      <main style={{ flex: 1, marginLeft: SIDEBAR_WIDTH, minWidth: 0, padding: "40px 40px 60px", maxWidth: 760 }}>
+      <main style={{ flex: 1, marginLeft: "var(--sidebar-w)", transition: "margin-left 0.2s ease", minWidth: 0, padding: "40px 40px 60px", maxWidth: 760 }}>
         {/* Header */}
         <div className="animate-fade-in" style={{ marginBottom: 48 }}>
           <h1

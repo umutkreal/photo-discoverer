@@ -49,8 +49,7 @@ const IDuplicates = () => (
 
 const IEdit = () => (
   <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-    <path d="M12 20h9"/>
-    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+    <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
   </svg>
 );
 
@@ -115,7 +114,8 @@ const MENU: MenuItem[] = [
 
 // ─── Constants ───────────────────────────────────────────────
 
-export const SIDEBAR_WIDTH = 240;
+export const SIDEBAR_WIDTH           = 240;
+export const SIDEBAR_COLLAPSED_WIDTH = 64;
 
 const FONT = "-apple-system, 'SF Pro Display', BlinkMacSystemFont, 'Segoe UI', sans-serif";
 
@@ -124,30 +124,41 @@ const FONT = "-apple-system, 'SF Pro Display', BlinkMacSystemFont, 'Segoe UI', s
 export default function Sidebar() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuOpen,  setMenuOpen]  = useState(false);
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("sidebar-collapsed") === "1";
+  });
   const menuRef = useRef<HTMLDivElement>(null);
   const btnRef  = useRef<HTMLButtonElement>(null);
 
+  // Sync CSS variable and persist
+  useEffect(() => {
+    const w = collapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_WIDTH;
+    document.documentElement.style.setProperty("--sidebar-w", `${w}px`);
+    localStorage.setItem("sidebar-collapsed", collapsed ? "1" : "0");
+  }, [collapsed]);
+
+  // Close account menu on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (
         menuRef.current && !menuRef.current.contains(e.target as Node) &&
         btnRef.current  && !btnRef.current.contains(e.target as Node)
-      ) {
-        setMenuOpen(false);
-      }
+      ) setMenuOpen(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  const w = collapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_WIDTH;
+
   return (
     <aside
       style={{
         position: "fixed",
-        top: 0,
-        left: 0,
-        width: SIDEBAR_WIDTH,
+        top: 0, left: 0,
+        width: w,
         height: "100vh",
         background: "var(--surface)",
         borderRight: "1px solid var(--border)",
@@ -155,44 +166,61 @@ export default function Sidebar() {
         flexDirection: "column",
         zIndex: 50,
         fontFamily: FONT,
+        transition: "width 0.2s ease",
       }}
     >
-      {/* Logo */}
-      <div style={{ padding: "20px 16px", borderBottom: "1px solid var(--border)" }}>
-        <Link href="/dashboard" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
-          <div
-            style={{
-              width: 34,
-              height: 34,
-              borderRadius: 9,
-              background: "linear-gradient(135deg, var(--accent), #a78bfa)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              flexShrink: 0,
-            }}
-          >
-            <Logo />
-          </div>
-          <span style={{ fontSize: 15, fontWeight: 600, color: "var(--text)", letterSpacing: "-0.3px" }}>
+      {/* Logo / Sidebar toggle */}
+      <button
+        onClick={() => setCollapsed(v => !v)}
+        title={collapsed ? "Open sidebar" : "Close sidebar"}
+        style={{
+          padding: collapsed ? "18px 0" : "20px 16px",
+          borderBottom: "1px solid var(--border)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: collapsed ? "center" : "flex-start",
+          gap: 10,
+          flexShrink: 0,
+          minHeight: 65,
+          width: "100%",
+          background: "transparent",
+          border: "none",
+          cursor: "pointer",
+          transition: "background 0.12s",
+          fontFamily: FONT,
+        }}
+        onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.04)"; }}
+        onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
+      >
+        <div style={{
+          width: 34, height: 34, borderRadius: 9, flexShrink: 0,
+          background: "linear-gradient(135deg, var(--accent), #a78bfa)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <Logo />
+        </div>
+        {!collapsed && (
+          <span style={{ fontSize: 15, fontWeight: 600, color: "var(--text)", letterSpacing: "-0.3px", whiteSpace: "nowrap" }}>
             PhotoMind
           </span>
-        </Link>
-      </div>
+        )}
+      </button>
 
       {/* Nav */}
-      <nav style={{ flex: 1, padding: "8px 8px", display: "flex", flexDirection: "column", gap: 1 }}>
+      <nav style={{ flex: 1, padding: "8px", display: "flex", flexDirection: "column", gap: 1 }}>
         {NAV.map(({ href, label, Icon }) => {
           const active = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
           return (
             <Link
               key={href}
               href={href}
+              title={collapsed ? label : undefined}
               style={{
                 display: "flex",
                 alignItems: "center",
-                gap: 10,
-                padding: "9px 10px",
+                justifyContent: collapsed ? "center" : "flex-start",
+                gap: collapsed ? 0 : 10,
+                padding: collapsed ? "9px 0" : "9px 10px",
                 borderRadius: 8,
                 textDecoration: "none",
                 color: active ? "var(--text)" : "var(--text-muted)",
@@ -200,6 +228,7 @@ export default function Sidebar() {
                 fontSize: 14,
                 fontWeight: active ? 500 : 400,
                 transition: "background 0.12s, color 0.12s",
+                whiteSpace: "nowrap",
               }}
               onMouseEnter={(e) => {
                 if (!active) (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.05)";
@@ -209,10 +238,13 @@ export default function Sidebar() {
               }}
             >
               <span style={{ flexShrink: 0, opacity: active ? 1 : 0.7 }}><Icon /></span>
-              {label}
+              {!collapsed && label}
             </Link>
           );
         })}
+
+        {/* Spacer */}
+        <div style={{ flex: 1 }} />
       </nav>
 
       {/* Account button */}
@@ -238,17 +270,12 @@ export default function Sidebar() {
             >
               <style>{`@keyframes sbMenuIn { from { opacity:0; transform:translateY(6px) scale(0.97); } to { opacity:1; transform:translateY(0) scale(1); } }`}</style>
 
-              {/* Email header */}
-              <div
-                style={{
-                  padding: "7px 10px 9px",
-                  fontSize: 11,
-                  color: "var(--text-muted)",
-                  borderBottom: "1px solid var(--border)",
-                  marginBottom: 4,
-                  fontFamily: FONT,
-                }}
-              >
+              <div style={{
+                padding: "7px 10px 9px",
+                fontSize: 11, color: "var(--text-muted)",
+                borderBottom: "1px solid var(--border)",
+                marginBottom: 4, fontFamily: FONT,
+              }}>
                 {user.email}
               </div>
 
@@ -262,26 +289,16 @@ export default function Sidebar() {
                     key={i}
                     href={action ? undefined : (href ?? "#")}
                     onClick={(e) => {
-                      if (action === "logout") {
-                        e.preventDefault();
-                        setMenuOpen(false);
-                        logout();
-                      } else {
-                        setMenuOpen(false);
-                      }
+                      if (action === "logout") { e.preventDefault(); setMenuOpen(false); logout(); }
+                      else setMenuOpen(false);
                     }}
                     style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 10,
-                      padding: "8px 10px",
-                      borderRadius: 7,
+                      display: "flex", alignItems: "center", gap: 10,
+                      padding: "8px 10px", borderRadius: 7,
                       fontSize: 13.5,
                       color: danger ? "var(--error)" : "var(--text-muted)",
-                      cursor: "pointer",
-                      textDecoration: "none",
-                      fontFamily: FONT,
-                      transition: "background 0.1s, color 0.1s",
+                      cursor: "pointer", textDecoration: "none",
+                      fontFamily: FONT, transition: "background 0.1s, color 0.1s",
                     }}
                     onMouseEnter={(e) => {
                       const el = e.currentTarget as HTMLAnchorElement;
@@ -310,8 +327,9 @@ export default function Sidebar() {
             style={{
               display: "flex",
               alignItems: "center",
+              justifyContent: collapsed ? "center" : "flex-start",
               gap: 10,
-              padding: "12px 12px",
+              padding: collapsed ? "12px 0" : "12px 12px",
               width: "100%",
               background: menuOpen ? "rgba(255,255,255,0.04)" : "transparent",
               border: "none",
@@ -331,30 +349,32 @@ export default function Sidebar() {
               // eslint-disable-next-line @next/next/no-img-element
               <img src={user.picture} alt={user.name} style={{ width: 30, height: 30, borderRadius: "50%", flexShrink: 0 }} />
             ) : (
-              <div
-                style={{
-                  width: 30, height: 30, borderRadius: "50%",
-                  background: "var(--accent)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 12, fontWeight: 600, color: "white", flexShrink: 0,
-                }}
-              >
+              <div style={{
+                width: 30, height: 30, borderRadius: "50%",
+                background: "var(--accent)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 12, fontWeight: 600, color: "white", flexShrink: 0,
+              }}>
                 {user.name[0].toUpperCase()}
               </div>
             )}
-            <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
-              <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {user.name}
-              </div>
-              <div style={{ fontSize: 11, color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {user.email}
-              </div>
-            </div>
-            <span style={{ color: "var(--dimmer)", flexShrink: 0 }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M7 15l5-5 5 5"/>
-              </svg>
-            </span>
+            {!collapsed && (
+              <>
+                <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {user.name}
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {user.email}
+                  </div>
+                </div>
+                <span style={{ color: "var(--dimmer)", flexShrink: 0 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M7 15l5-5 5 5"/>
+                  </svg>
+                </span>
+              </>
+            )}
           </button>
         </div>
       )}
