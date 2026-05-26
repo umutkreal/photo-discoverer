@@ -663,9 +663,10 @@ function MaskCanvasModal({ imageUrl, onClose, onConfirm }: {
     ctx.lineJoin = "round";
     ctx.lineWidth = brushSize;
 
+    const PAINT = "rgba(80, 60, 240, 0.82)";
     if (tool === "brush") {
       ctx.globalCompositeOperation = "source-over";
-      ctx.strokeStyle = "white";
+      ctx.strokeStyle = PAINT;
       ctx.lineTo(p.x, p.y);
       ctx.stroke();
     } else if (tool === "eraser") {
@@ -676,7 +677,7 @@ function MaskCanvasModal({ imageUrl, onClose, onConfirm }: {
     } else if (tool === "rect" && saved.current) {
       ctx.putImageData(saved.current, 0, 0);
       ctx.globalCompositeOperation = "source-over";
-      ctx.fillStyle = "rgba(255,255,255,0.9)";
+      ctx.fillStyle = PAINT;
       ctx.fillRect(origin.current.x, origin.current.y, p.x - origin.current.x, p.y - origin.current.y);
     } else if (tool === "circle" && saved.current) {
       ctx.putImageData(saved.current, 0, 0);
@@ -685,7 +686,7 @@ function MaskCanvasModal({ imageUrl, onClose, onConfirm }: {
       const ry = Math.abs(p.y - origin.current.y) / 2;
       const cx = Math.min(p.x, origin.current.x) + rx;
       const cy = Math.min(p.y, origin.current.y) + ry;
-      ctx.fillStyle = "rgba(255,255,255,0.9)";
+      ctx.fillStyle = PAINT;
       ctx.beginPath();
       ctx.ellipse(cx, cy, Math.max(rx, 1), Math.max(ry, 1), 0, 0, Math.PI * 2);
       ctx.fill();
@@ -706,13 +707,19 @@ function MaskCanvasModal({ imageUrl, onClose, onConfirm }: {
 
   const applyMask = () => {
     if (!canvasRef.current) return;
+    const src = canvasRef.current.getContext("2d")!
+      .getImageData(0, 0, displaySize.w, displaySize.h);
     const exp = document.createElement("canvas");
     exp.width = displaySize.w;
     exp.height = displaySize.h;
     const ectx = exp.getContext("2d")!;
-    ectx.fillStyle = "black";
-    ectx.fillRect(0, 0, displaySize.w, displaySize.h);
-    ectx.drawImage(canvasRef.current, 0, 0);
+    const out = ectx.createImageData(displaySize.w, displaySize.h);
+    for (let i = 0; i < src.data.length; i += 4) {
+      const v = src.data[i + 3] > 10 ? 255 : 0; // painted → white, transparent → black
+      out.data[i] = out.data[i + 1] = out.data[i + 2] = v;
+      out.data[i + 3] = 255;
+    }
+    ectx.putImageData(out, 0, 0);
     onConfirm(exp.toDataURL("image/png").split(",")[1]);
   };
 
@@ -772,7 +779,6 @@ function MaskCanvasModal({ imageUrl, onClose, onConfirm }: {
             onMouseLeave={handleMouseUp}
             style={{
               position: "absolute", inset: 0,
-              opacity: 0.55, mixBlendMode: "screen",
               cursor: "crosshair", userSelect: "none",
             }}
           />
