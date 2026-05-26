@@ -48,7 +48,7 @@ class BaseEditProvider(ABC):
     def inpaint(self, gorsel: Image.Image, maske: Image.Image, prompt: str, guc: float = 0.85) -> EditSonucu: ...
 
     @abstractmethod
-    def outpaint(self, gorsel: Image.Image, prompt: str, outpaint_modu: str = "Zoom out 2x", steps: int = 50, guidance: float = 3.0, safety_tolerance: int = 2) -> EditSonucu: ...
+    def outpaint(self, gorsel: Image.Image, prompt: str, outpaint_modu: str = "Zoom out 2x", steps: int = 50) -> EditSonucu: ...
 
     @abstractmethod
     def background_remove(self, gorsel: Image.Image) -> EditSonucu: ...
@@ -74,8 +74,6 @@ class BaseEditProvider(ABC):
         guc: float = 0.85,
         outpaint_modu: str = "Zoom out 2x",
         adimlar: int = 50,
-        kilavuz: float = 3.0,
-        guvenlik: int = 2,
         olcek: int = 2,
         aciklama: str = "Fix scratches, damage, and improve overall quality",
     ) -> EditSonucu:
@@ -92,7 +90,7 @@ class BaseEditProvider(ABC):
             case EditIslemi.INPAINTING:
                 return self.inpaint(gorsel, maske, prompt, guc)
             case EditIslemi.OUTPAINTING:
-                return self.outpaint(gorsel, prompt, outpaint_modu, adimlar, kilavuz, guvenlik)
+                return self.outpaint(gorsel, prompt, outpaint_modu, adimlar)
             case EditIslemi.BACKGROUND_REMOVE:
                 return self.background_remove(gorsel)
             case EditIslemi.RESTORE:

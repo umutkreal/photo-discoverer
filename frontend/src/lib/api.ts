@@ -222,8 +222,6 @@ export interface NewEditRequest {
   guc?: number;
   outpaint_modu?: string;
   adimlar?: number;
-  kilavuz?: number;
-  guvenlik?: number;
   olcek?: number;
   aciklama?: string;
 }

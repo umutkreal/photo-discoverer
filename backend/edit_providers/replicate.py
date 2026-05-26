@@ -56,7 +56,7 @@ class ReplicateEditProvider(BaseEditProvider):
             raise EditHatasi(EditIslemi.INPAINTING, str(e), self.provider_adi)
         return EditSonucu(gorsel=self._output_to_pil(output), model=model)
 
-    def outpaint(self, gorsel: Image.Image, prompt: str, outpaint_modu: str = "Zoom out 2x", steps: int = 50, guidance: float = 3.0, safety_tolerance: int = 2) -> EditSonucu:
+    def outpaint(self, gorsel: Image.Image, prompt: str, outpaint_modu: str = "Zoom out 2x", steps: int = 50) -> EditSonucu:
         model = _MODELLER["flux_fill_pro"]
         try:
             output = replicate.run(model, input={
@@ -64,8 +64,8 @@ class ReplicateEditProvider(BaseEditProvider):
                 "prompt":           prompt,
                 "outpaint":         outpaint_modu,
                 "steps":            steps,
-                "guidance":         guidance,
-                "safety_tolerance": safety_tolerance,
+                "guidance":         3.0,
+                "safety_tolerance": 2,
                 "output_format":    "jpg",
                 "output_quality":   92,
             })

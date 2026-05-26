@@ -819,8 +819,6 @@ class EditIstek(BaseModel):
     guc:           float          = Field(0.85, ge=0.0, le=1.0)
     outpaint_modu: str            = "Zoom out 2x"
     adimlar:       int            = Field(50, ge=1, le=50)
-    kilavuz:       float          = Field(3.0, ge=1.0, le=10.0)
-    guvenlik:      int            = Field(2, ge=0, le=6)
     olcek:         int            = Field(2, ge=2, le=4)
     aciklama:      str            = "Fix scratches, damage, and improve overall quality"
 
@@ -880,8 +878,6 @@ async def fotograf_duzenle(
                 guc=istek.guc,
                 outpaint_modu=istek.outpaint_modu,
                 adimlar=istek.adimlar,
-                kilavuz=istek.kilavuz,
-                guvenlik=istek.guvenlik,
                 olcek=istek.olcek,
                 aciklama=istek.aciklama,
             ),

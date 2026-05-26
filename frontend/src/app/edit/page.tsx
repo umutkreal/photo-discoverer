@@ -23,7 +23,7 @@ interface Operation {
 
 interface EditParams {
   prompt: string; description: string;
-  strength: number; steps: number; guidance: number; safety_tolerance: number; scale: number;
+  strength: number; steps: number; scale: number;
   outpaint_mode: string;
 }
 
@@ -31,7 +31,7 @@ interface EditParams {
 
 const OPERATIONS: Operation[] = [
   { id: "inpainting",        label: "Inpainting",         icon: "✦", description: "Masked alanı yeni içerikle doldur",       color: "#7C6AF7", params: ["prompt","mask","strength"], model: "black-forest-labs/flux-fill-pro"      },
-  { id: "outpainting",       label: "Outpainting",        icon: "⊞", description: "Görüntüyü kenarından genişlet",           color: "#5BA4F5", params: ["outpaint_mode","prompt","steps","guidance","safety_tolerance"], model: "black-forest-labs/flux-fill-pro"  },
+  { id: "outpainting",       label: "Outpainting",        icon: "⊞", description: "Görüntüyü kenarından genişlet",           color: "#5BA4F5", params: ["outpaint_mode","prompt","steps"], model: "black-forest-labs/flux-fill-pro"  },
   { id: "style_transfer",    label: "Stil Transferi",     icon: "◫", description: "Promptla görüntünün stilini dönüştür",   color: "#4FC08D", params: ["prompt"],                   model: "black-forest-labs/flux-kontext-pro"  },
   { id: "background_remove", label: "Arka Plan Kaldır",   icon: "⬡", description: "Arka planı kaldır, şeffaf PNG çıkar",     color: "#E879A0", params: [],                           model: "bria/remove-background"              },
   { id: "text_edit",         label: "Metin ile Düzenle",  icon: "✎", description: "Doğal dil talimatıyla serbest düzenle",   color: "#F472B6", params: ["prompt"],                   model: "black-forest-labs/flux-kontext-max"  },
@@ -195,20 +195,33 @@ function CompareCanvas({
   const [drag, setDrag] = useState(false);
   const [boxW, setBoxW] = useState(0);
   const [boxH, setBoxH] = useState(0);
+  const [resultDims, setResultDims] = useState<{w:number,h:number}|null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef(false);
 
-  const handleBeforeLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
-    const img = e.currentTarget;
+  const calcDisplaySize = (nw: number, nh: number) => {
     const maxW = Math.min(900, window.innerWidth - 460 - 80);
     const maxH = window.innerHeight * 0.78;
-    let w = img.naturalWidth;
-    let h = img.naturalHeight;
+    let w = nw, h = nh;
     if (w > maxW) { h = Math.round(h * maxW / w); w = Math.round(maxW); }
     if (h > maxH) { w = Math.round(w * maxH / h); h = Math.round(maxH); }
+    return { w, h };
+  };
+
+  const handleBeforeLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
+    const { w, h } = calcDisplaySize(e.currentTarget.naturalWidth, e.currentTarget.naturalHeight);
     setBoxW(w);
     setBoxH(h);
   }, []);
+
+  const handleResultLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
+    const { w, h } = calcDisplaySize(e.currentTarget.naturalWidth, e.currentTarget.naturalHeight);
+    setResultDims({ w, h });
+  }, []);
+
+  useEffect(() => {
+    if (!resultImage) setResultDims(null);
+  }, [resultImage]);
 
   // Always-on listeners — use dragRef so there's no frame-delay timing gap
   useEffect(() => {
@@ -274,12 +287,17 @@ function CompareCanvas({
         </div>
       ) : (
         <div>
+          {(() => {
+            const dispW = resultDims ? resultDims.w : boxW;
+            const dispH = resultDims ? resultDims.h : boxH;
+            const resultIsLarger = resultDims != null && (resultDims.w > boxW || resultDims.h > boxH);
+            return (
           <div
             ref={wrapRef}
             style={{
               position: "relative",
-              width: boxW || undefined,
-              height: boxH || undefined,
+              width: dispW || undefined,
+              height: dispH || undefined,
               borderRadius: 10, overflow: "hidden",
               boxShadow: "0 30px 80px -20px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.04)",
               background: "#000",
@@ -297,10 +315,11 @@ function CompareCanvas({
               onLoad={handleBeforeLoad}
               style={{
                 display: "block",
-                width: boxW ? "100%" : "auto",
-                height: boxH ? "100%" : "auto",
+                width: (boxW || resultIsLarger) ? "100%" : "auto",
+                height: (boxH || resultIsLarger) ? "100%" : "auto",
                 maxWidth: boxW ? "none" : "min(900px, calc(100vw - 460px - 80px))",
                 maxHeight: boxH ? "none" : "78vh",
+                objectFit: resultIsLarger ? "contain" : undefined,
                 userSelect: "none", pointerEvents: "none",
               }}
             />
@@ -321,9 +340,10 @@ function CompareCanvas({
                 src={resultImage}
                 alt="after"
                 draggable={false}
+                onLoad={handleResultLoad}
                 style={{
                   position: "absolute", inset: 0, width: "100%", height: "100%",
-                  objectFit: "fill", userSelect: "none", pointerEvents: "none",
+                  objectFit: "contain", userSelect: "none", pointerEvents: "none",
                   clipPath: afterClip, WebkitClipPath: afterClip,
                   zIndex: 2,
                 }}
@@ -390,6 +410,7 @@ function CompareCanvas({
               </>
             )}
           </div>
+          ); })()}
         </div>
       )}
     </div>
@@ -1069,16 +1090,6 @@ function AIEditPanel({
                 value={params.steps} onChange={(v) => setParam("steps", v)}
                 format={(v) => `${v}`} />
             )}
-            {op.params.includes("guidance") && (
-              <ParamSlider op={op} label="Guidance" min={1} max={10} step={0.5}
-                value={params.guidance} onChange={(v) => setParam("guidance", v)}
-                format={(v) => v.toFixed(1)} />
-            )}
-            {op.params.includes("safety_tolerance") && (
-              <ParamSlider op={op} label="Güvenlik" min={0} max={6} step={1}
-                value={params.safety_tolerance} onChange={(v) => setParam("safety_tolerance", v)}
-                format={(v) => `${v}`} />
-            )}
             {op.params.includes("scale") && (
               <ParamSeg op={op} label="Ölçek"
                 options={[{ value: 2, label: "2×" }, { value: 4, label: "4×" }]}
@@ -1416,7 +1427,7 @@ export default function EditPage() {
   // Panel state
   const [selectedId, setSelectedId] = useState<OpId | null>(null);
   const [params, setParamsState] = useState<EditParams>({
-    prompt: "", description: "", strength: 0.85, steps: 50, guidance: 3, safety_tolerance: 2, scale: 2,
+    prompt: "", description: "", strength: 0.85, steps: 50, scale: 2,
     outpaint_mode: "Zoom out 2x",
   });
   const setParam = (k: keyof EditParams, v: EditParams[keyof EditParams]) =>
@@ -1489,8 +1500,6 @@ export default function EditPage() {
         guc: op.params.includes("strength") ? params.strength : undefined,
         outpaint_modu: op.params.includes("outpaint_mode") ? params.outpaint_mode : undefined,
         adimlar: op.params.includes("steps") ? params.steps : undefined,
-        kilavuz: op.params.includes("guidance") ? params.guidance : undefined,
-        guvenlik: op.params.includes("safety_tolerance") ? params.safety_tolerance : undefined,
         olcek: op.params.includes("scale") ? params.scale as 2 | 4 : undefined,
         aciklama: op.params.includes("description") ? params.description || undefined : undefined,
         maske_b64: op.params.includes("mask") ? maskB64 ?? undefined : undefined,
