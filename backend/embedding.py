@@ -2,6 +2,14 @@ from transformers import CLIPProcessor, CLIPModel
 from PIL import Image
 import torch
 import torch.nn.functional as F
+from huggingface_hub import login
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+hf_token = os.getenv("HUGGINGFACE_TOKEN")
+if hf_token:
+    login(token=hf_token)
 
 print("CLIP modeli yükleniyor...")
 model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")

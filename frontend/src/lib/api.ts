@@ -227,6 +227,7 @@ export interface NewEditRequest {
 }
 export interface NewEditResult {
   sonuc_b64: string;
+  gorsel_b64?: string;
   mime_type: string;
   islem: string;
   edit_provider: string;

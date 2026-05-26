@@ -2,6 +2,11 @@ import os
 from io import BytesIO
 from typing import Optional
 
+
+class NamedBytesIO(BytesIO):
+    """BytesIO subclass with a .name attribute so the Replicate SDK can detect MIME type."""
+    name: str
+
 import httpx
 import replicate
 from PIL import Image
@@ -9,16 +14,13 @@ from PIL import Image
 from .base import BaseEditProvider, EditIslemi, EditSonucu, EditHatasi
 
 _MODELLER = {
-    "flux_fill_pro":    "black-forest-labs/flux-fill-pro",
-    "flux_kontext_pro": "black-forest-labs/flux-kontext-pro",
-    "restore_image":    "flux-kontext-apps/restore-image",
-    "clarity_pro":      "philz1337x/clarity-pro-upscaler",
+    "flux_fill_pro":      "black-forest-labs/flux-fill-pro",
+    "flux_kontext_pro":   "black-forest-labs/flux-kontext-pro",
+    "flux_kontext_max":   "black-forest-labs/flux-kontext-max",
+    "restore_image":      "flux-kontext-apps/restore-image",
+    "clarity_pro":        "philz1337x/clarity-pro-upscaler",
+    "remove_background":  "bria/remove-background",
 }
-
-_FACE_PROMPT = (
-    "Restore and enhance facial features, fix blurriness, "
-    "improve skin texture and details"
-)
 
 _YON_MAP = {
     "left":  "padding_left",
@@ -59,7 +61,7 @@ class ReplicateEditProvider(BaseEditProvider):
             })
         except Exception as e:
             raise EditHatasi(EditIslemi.INPAINTING, str(e), self.provider_adi)
-        return EditSonucu(gorsel=self._url_to_pil(self._cikti_url(output)), model=model)
+        return EditSonucu(gorsel=self._output_to_pil(output), model=model)
 
     def outpaint(self, gorsel: Image.Image, prompt: str, yon: str = "right", px: int = 256) -> EditSonucu:
         model = _MODELLER["flux_fill_pro"]
@@ -74,39 +76,28 @@ class ReplicateEditProvider(BaseEditProvider):
             })
         except Exception as e:
             raise EditHatasi(EditIslemi.OUTPAINTING, str(e), self.provider_adi)
-        return EditSonucu(gorsel=self._url_to_pil(self._cikti_url(output)), model=model)
+        return EditSonucu(gorsel=self._output_to_pil(output), model=model)
 
-    def nesne_kaldir(self, gorsel: Image.Image, maske: Image.Image) -> EditSonucu:
-        sonuc = self.inpaint(gorsel, maske, prompt="", guc=0.97)
-        return EditSonucu(gorsel=sonuc.gorsel, model=sonuc.model)
-
-    def arka_plan_degistir(self, gorsel: Image.Image, prompt: str) -> EditSonucu:
-        model = _MODELLER["flux_kontext_pro"]
+    def background_remove(self, gorsel: Image.Image) -> EditSonucu:
+        model = _MODELLER["remove_background"]
         try:
             output = replicate.run(model, input={
-                "image":          self._pil_to_file(gorsel, "RGB"),
-                "prompt":         prompt,
-                "output_format":  "jpg",
-                "output_quality": 92,
+                "image": self._pil_to_file(gorsel, "RGB"),
             })
         except Exception as e:
-            raise EditHatasi(EditIslemi.ARKA_PLAN_DEGIS, str(e), self.provider_adi)
-        return EditSonucu(gorsel=self._url_to_pil(self._cikti_url(output)), model=model)
+            raise EditHatasi(EditIslemi.BACKGROUND_REMOVE, str(e), self.provider_adi)
+        return EditSonucu(gorsel=self._output_to_pil(output, mode="RGBA"), model=model)
 
     def restore(self, gorsel: Image.Image, aciklama: str = "Fix scratches, damage, and improve overall quality") -> EditSonucu:
         model = _MODELLER["restore_image"]
         try:
             output = replicate.run(model, input={
-                "image":  self._pil_to_file(gorsel, "RGB"),
-                "prompt": aciklama,
+                "input_image": self._pil_to_file(gorsel, "RGB"),
+                "prompt":      aciklama,
             })
         except Exception as e:
             raise EditHatasi(EditIslemi.RESTORE, str(e), self.provider_adi)
-        return EditSonucu(gorsel=self._url_to_pil(self._cikti_url(output)), model=model)
-
-    def yuz_restore(self, gorsel: Image.Image) -> EditSonucu:
-        sonuc = self.restore(gorsel, aciklama=_FACE_PROMPT)
-        return EditSonucu(gorsel=sonuc.gorsel, model=sonuc.model)
+        return EditSonucu(gorsel=self._output_to_pil(output), model=model)
 
     def upscale(self, gorsel: Image.Image, olcek: int = 2) -> EditSonucu:
         if olcek not in (2, 4):
@@ -124,42 +115,63 @@ class ReplicateEditProvider(BaseEditProvider):
             })
         except Exception as e:
             raise EditHatasi(EditIslemi.UPSCALE, str(e), self.provider_adi)
-        return EditSonucu(gorsel=self._url_to_pil(self._cikti_url(output)), model=model)
+        return EditSonucu(gorsel=self._output_to_pil(output), model=model)
 
     def stil_transfer(self, gorsel: Image.Image, prompt: str) -> EditSonucu:
         model = _MODELLER["flux_kontext_pro"]
         try:
             output = replicate.run(model, input={
-                "image":          self._pil_to_file(gorsel, "RGB"),
-                "prompt":         prompt,
+                "input_image": self._pil_to_file(gorsel, "RGB"),
+                "prompt":prompt,
                 "output_format":  "jpg",
                 "output_quality": 92,
             })
         except Exception as e:
             raise EditHatasi(EditIslemi.STIL_TRANSFER, str(e), self.provider_adi)
-        return EditSonucu(gorsel=self._url_to_pil(self._cikti_url(output)), model=model)
+        return EditSonucu(gorsel=self._output_to_pil(output), model=model)
+
+    def text_edit(self, gorsel: Image.Image, prompt: str) -> EditSonucu:
+        model = _MODELLER["flux_kontext_max"]
+        try:
+            output = replicate.run(model, input={
+                "input_image":          self._pil_to_file(gorsel, "RGB"),
+                "prompt":         prompt,
+                "output_format":  "jpg",
+                "output_quality": 92,
+            })
+        except Exception as e:
+            raise EditHatasi(EditIslemi.TEXT_EDIT, str(e), self.provider_adi)
+        return EditSonucu(gorsel=self._output_to_pil(output), model=model)
 
     # ─── Private helpers ──────────────────────────────────────────
 
     @staticmethod
-    def _pil_to_file(image: Image.Image, mode: str) -> BytesIO:
+    def _pil_to_file(image: Image.Image, mode: str) -> NamedBytesIO:
         img = image.convert(mode)
-        buf = BytesIO()
+        buf = NamedBytesIO()
         if mode == "L":
             img.save(buf, format="PNG")
+            buf.name = "image.png"
         else:
             img.save(buf, format="JPEG", quality=95)
+            buf.name = "image.jpg"
         buf.seek(0)
         return buf
 
     @staticmethod
-    def _url_to_pil(url: str) -> Image.Image:
-        resp = httpx.get(url, timeout=120, follow_redirects=True)
-        resp.raise_for_status()
-        return Image.open(BytesIO(resp.content)).convert("RGB")
+    def _output_to_pil(output, mode: str = "RGB") -> Image.Image:
+        if isinstance(output, (str, bytes)):
+            item = output
+        elif hasattr(output, "__iter__"):
+            chunks = list(output)
+            if not chunks:
+                raise ValueError("Empty model output")
+            item = b"".join(chunks) if isinstance(chunks[0], bytes) else chunks[0]
+        else:
+            item = output
 
-    @staticmethod
-    def _cikti_url(output) -> str:
-        if hasattr(output, "__iter__") and not isinstance(output, (str, bytes)):
-            return next(iter(output))
-        return str(output)
+        if isinstance(item, bytes):
+            return Image.open(BytesIO(item)).convert(mode)
+        resp = httpx.get(str(item), timeout=120, follow_redirects=True)
+        resp.raise_for_status()
+        return Image.open(BytesIO(resp.content)).convert(mode)

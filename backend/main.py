@@ -887,12 +887,21 @@ async def fotograf_duzenle(
 
     # 4. Sonucu base64'e çevir
     buf = BytesIO()
-    sonuc.gorsel.save(buf, format="JPEG", quality=92)
+    if sonuc.gorsel.mode == "RGBA":
+        sonuc.gorsel.save(buf, format="PNG")
+        mime_type = "image/png"
+    else:
+        sonuc.gorsel.save(buf, format="JPEG", quality=92)
+        mime_type = "image/jpeg"
     w, h = sonuc.gorsel.size
+
+    gorsel_buf = BytesIO()
+    gorsel.save(gorsel_buf, format="JPEG", quality=92)
 
     return {
         "sonuc_b64":     base64.b64encode(buf.getvalue()).decode(),
-        "mime_type":     "image/jpeg",
+        "gorsel_b64":    base64.b64encode(gorsel_buf.getvalue()).decode(),
+        "mime_type":     mime_type,
         "islem":         istek.islem,
         "edit_provider": istek.edit_provider,
         "model":         sonuc.model,

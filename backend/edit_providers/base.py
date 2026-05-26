@@ -6,14 +6,13 @@ from PIL import Image
 
 
 class EditIslemi(str, Enum):
-    INPAINTING      = "inpainting"
-    OUTPAINTING     = "outpainting"
-    NESNE_KALDIR    = "object_remove"
-    ARKA_PLAN_DEGIS = "background_swap"
-    RESTORE         = "restore"
-    YUZ_RESTORE     = "face_restore"
-    UPSCALE         = "upscale"
-    STIL_TRANSFER   = "style_transfer"
+    INPAINTING       = "inpainting"
+    OUTPAINTING      = "outpainting"
+    BACKGROUND_REMOVE = "background_remove"
+    RESTORE          = "restore"
+    UPSCALE          = "upscale"
+    STIL_TRANSFER    = "style_transfer"
+    TEXT_EDIT        = "text_edit"
 
 
 class EditHatasi(Exception):
@@ -52,22 +51,19 @@ class BaseEditProvider(ABC):
     def outpaint(self, gorsel: Image.Image, prompt: str, yon: str = "right", px: int = 256) -> EditSonucu: ...
 
     @abstractmethod
-    def nesne_kaldir(self, gorsel: Image.Image, maske: Image.Image) -> EditSonucu: ...
-
-    @abstractmethod
-    def arka_plan_degistir(self, gorsel: Image.Image, prompt: str) -> EditSonucu: ...
+    def background_remove(self, gorsel: Image.Image) -> EditSonucu: ...
 
     @abstractmethod
     def restore(self, gorsel: Image.Image, aciklama: str = "Fix scratches, damage, and improve overall quality") -> EditSonucu: ...
-
-    @abstractmethod
-    def yuz_restore(self, gorsel: Image.Image) -> EditSonucu: ...
 
     @abstractmethod
     def upscale(self, gorsel: Image.Image, olcek: int = 2) -> EditSonucu: ...
 
     @abstractmethod
     def stil_transfer(self, gorsel: Image.Image, prompt: str) -> EditSonucu: ...
+
+    @abstractmethod
+    def text_edit(self, gorsel: Image.Image, prompt: str) -> EditSonucu: ...
 
     def isle(
         self,
@@ -84,10 +80,10 @@ class BaseEditProvider(ABC):
         if islem not in self.desteklenen_islemler:
             raise EditHatasi(islem, f"Bu işlem desteklenmiyor. Desteklenenler: {[i.value for i in self.desteklenen_islemler]}", self.provider_adi)
 
-        if islem in (EditIslemi.INPAINTING, EditIslemi.NESNE_KALDIR) and maske is None:
+        if islem == EditIslemi.INPAINTING and maske is None:
             raise EditHatasi(islem, "'maske' parametresi zorunlu", self.provider_adi)
 
-        if islem in (EditIslemi.INPAINTING, EditIslemi.OUTPAINTING, EditIslemi.ARKA_PLAN_DEGIS, EditIslemi.STIL_TRANSFER) and not prompt:
+        if islem in (EditIslemi.INPAINTING, EditIslemi.OUTPAINTING, EditIslemi.STIL_TRANSFER, EditIslemi.TEXT_EDIT) and not prompt:
             raise EditHatasi(islem, "'prompt' parametresi zorunlu", self.provider_adi)
 
         match islem:
@@ -95,15 +91,13 @@ class BaseEditProvider(ABC):
                 return self.inpaint(gorsel, maske, prompt, guc)
             case EditIslemi.OUTPAINTING:
                 return self.outpaint(gorsel, prompt, yon, genisletme_px)
-            case EditIslemi.NESNE_KALDIR:
-                return self.nesne_kaldir(gorsel, maske)
-            case EditIslemi.ARKA_PLAN_DEGIS:
-                return self.arka_plan_degistir(gorsel, prompt)
+            case EditIslemi.BACKGROUND_REMOVE:
+                return self.background_remove(gorsel)
             case EditIslemi.RESTORE:
                 return self.restore(gorsel, aciklama)
-            case EditIslemi.YUZ_RESTORE:
-                return self.yuz_restore(gorsel)
             case EditIslemi.UPSCALE:
                 return self.upscale(gorsel, olcek)
             case EditIslemi.STIL_TRANSFER:
                 return self.stil_transfer(gorsel, prompt)
+            case EditIslemi.TEXT_EDIT:
+                return self.text_edit(gorsel, prompt)

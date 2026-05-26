@@ -9,15 +9,16 @@ import type { SourceKey, IntegrationsResponse, NewEditRequest, PhotoResult } fro
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type OpId =
-  | "inpainting" | "outpainting" | "object_remove" | "background_swap"
-  | "restore" | "face_restore" | "upscale" | "style_transfer";
+  | "inpainting" | "outpainting" | "style_transfer" | "background_remove"
+  | "text_edit" | "restore" | "upscale";
 
 type ViewMode  = "compare" | "before" | "after";
 type MaskMode  = "brush" | "box" | "smart";
+type MaskTool  = "brush" | "eraser" | "rect" | "circle";
 
 interface Operation {
-  id: OpId; label: string; icon: string; desc: string;
-  color: string; params: string[]; eta: number; cost: number;
+  id: OpId; label: string; icon: string; description: string;
+  color: string; params: string[]; model: string;
 }
 
 interface EditParams {
@@ -28,27 +29,21 @@ interface EditParams {
 // ─── Data ────────────────────────────────────────────────────────────────────
 
 const OPERATIONS: Operation[] = [
-  { id: "inpainting",      label: "Inpainting",      icon: "✦", desc: "Masked alan içini doldur",           color: "#7C6AF7", params: ["prompt","mask","strength"], eta: 14, cost: 0.018 },
-  { id: "outpainting",     label: "Outpainting",     icon: "⊕", desc: "Görüntüyü kenarından genişlet",      color: "#5BA4F5", params: ["prompt","direction","pixels"], eta: 18, cost: 0.022 },
-  { id: "object_remove",   label: "Nesne Sil",       icon: "✕", desc: "Nesneyi sil, arka planı doldur",     color: "#F56E6E", params: ["mask"],                       eta: 9,  cost: 0.012 },
-  { id: "background_swap", label: "Arka Plan",       icon: "▪", desc: "Metin promptu ile arka planı değiştir", color: "#4FC08D", params: ["prompt"],                 eta: 11, cost: 0.014 },
-  { id: "restore",         label: "Restorasyon",     icon: "◎", desc: "Çizik, hasar, solmayı onar",         color: "#F5A623", params: ["description"],                eta: 8,  cost: 0.010 },
-  { id: "face_restore",    label: "Yüz İyileştir",   icon: "◈", desc: "Bulanık yüzleri netleştir",          color: "#E879A0", params: [],                             eta: 6,  cost: 0.008 },
-  { id: "upscale",         label: "Çözünürlük Artır",icon: "↑", desc: "2× veya 4× çözünürlük artır",        color: "#50B8E7", params: ["scale"],                      eta: 12, cost: 0.015 },
-  { id: "style_transfer",  label: "Stil Aktarımı",   icon: "✧", desc: "Metin promptu ile sanatsal stil uygula", color: "#A78BFA", params: ["prompt"],                eta: 16, cost: 0.020 },
+  { id: "inpainting",        label: "Inpainting",         icon: "✦", description: "Masked alanı yeni içerikle doldur",       color: "#7C6AF7", params: ["prompt","mask","strength"], model: "black-forest-labs/flux-fill-pro"      },
+  { id: "outpainting",       label: "Outpainting",        icon: "⊞", description: "Görüntüyü kenarından genişlet",           color: "#5BA4F5", params: ["prompt","direction","pixels"], model: "black-forest-labs/flux-fill-pro"  },
+  { id: "style_transfer",    label: "Stil Transferi",     icon: "◫", description: "Promptla görüntünün stilini dönüştür",   color: "#4FC08D", params: ["prompt"],                   model: "black-forest-labs/flux-kontext-pro"  },
+  { id: "background_remove", label: "Arka Plan Kaldır",   icon: "⬡", description: "Arka planı kaldır, şeffaf PNG çıkar",     color: "#E879A0", params: [],                           model: "bria/remove-background"              },
+  { id: "text_edit",         label: "Metin ile Düzenle",  icon: "✎", description: "Doğal dil talimatıyla serbest düzenle",   color: "#F472B6", params: ["prompt"],                   model: "black-forest-labs/flux-kontext-max"  },
+  { id: "restore",           label: "Restorasyon",        icon: "◎", description: "Çizik, hasar, solmayı onar",              color: "#F5A623", params: ["description"],              model: "flux-kontext-apps/restore-image"     },
+  { id: "upscale",           label: "Çözünürlük Artır",  icon: "⊕", description: "2× veya 4× çözünürlük artır",            color: "#50B8E7", params: ["scale"],                    model: "philz1337x/clarity-pro-upscaler"    },
 ];
 
-const PROVIDERS = [
-  { id: "replicate",  label: "Replicate",     model: "flux-fill-pro",    badge: "Aktif",   connected: true  },
-  { id: "fal",        label: "fal.ai",        model: "flux-dev-inpaint", badge: "Yakında", connected: false },
-  { id: "stability",  label: "Stability AI",  model: "sd-3-turbo",       badge: "Yakında", connected: false },
-];
 
-const PROMPT_PRESETS: Partial<Record<OpId, string[]>> = {
-  background_swap: ["güneşli sahil, altın saat", "açık gri stüdyo arka planı", "yumuşak bokeh ormanlık"],
-  inpainting:      ["küçük seramik vazo, yabanıl çiçekler", "ahşap masa dokusu", "uyuyan kedi"],
-  outpainting:     ["sahneyi doğal şekilde devam ettir", "açık gökyüzüne uzat", "daha fazla ön plan ekle"],
-  style_transfer:  ["suluboya, yumuşak fırça", "studio ghibli anime tarzı", "karanlık film noir"],
+const PROMPT_PLACEHOLDERS: Partial<Record<OpId, string>> = {
+  inpainting:      "Seçili alanı doldur: mavi gökyüzü…",
+  outpainting:     "Genişletilecek alanı açıkla…",
+  style_transfer:  "Stili dönüştür: empresyonist resim gibi…",
+  text_edit:       "Ne yapmak istediğini yaz…",
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -85,33 +80,28 @@ function TopBar({
 
   return (
     <header style={{
-      height: 56, flexShrink: 0,
+      height: 48, flexShrink: 0,
       display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center",
-      gap: 16, padding: "0 20px",
-      background: "var(--surface)", borderBottom: "1px solid var(--border)",
+      gap: 16, padding: "0 18px",
+      background: "var(--bg)",
+      borderBottom: "1px solid rgba(255,255,255,0.05)",
     }}>
-      {/* Left — change image button */}
+      {/* Left — change image */}
       <div>
         {hasImage && (
           <button
             onClick={onChangeImage}
             style={{
-              display: "flex", alignItems: "center", gap: 7,
-              padding: "7px 14px", borderRadius: 8, border: "1px solid var(--border)",
-              background: "transparent", color: "var(--text-muted)",
-              fontFamily: "var(--body)", fontSize: 12.5, cursor: "pointer",
-              transition: "background 0.12s, color 0.12s",
+              display: "flex", alignItems: "center", gap: 6,
+              padding: "5px 10px", borderRadius: 6, border: 0,
+              background: "transparent", color: "var(--dimmer)",
+              fontFamily: "var(--body)", fontSize: 12, cursor: "pointer",
+              transition: "color 0.12s",
             }}
-            onMouseEnter={(e) => {
-              (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.05)";
-              (e.currentTarget as HTMLButtonElement).style.color = "var(--text)";
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLButtonElement).style.background = "transparent";
-              (e.currentTarget as HTMLButtonElement).style.color = "var(--text-muted)";
-            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "var(--text)"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "var(--dimmer)"; }}
           >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
               <polyline points="21 15 16 10 5 21"/>
             </svg>
@@ -120,64 +110,65 @@ function TopBar({
         )}
       </div>
 
-      {/* Center — view toggle */}
-      <div style={{
-        display: "flex", gap: 2,
-        background: "var(--bg-2)", border: "1px solid var(--border)",
-        borderRadius: 9, padding: 3,
-      }}>
-        {(["compare","before","after"] as ViewMode[]).map((v) => (
-          <button
-            key={v}
-            onClick={() => setViewMode(v)}
-            style={{
-              padding: "6px 14px", borderRadius: 6, border: 0,
-              background: viewMode === v ? "rgba(255,255,255,0.06)" : "transparent",
-              color: viewMode === v ? "var(--text)" : "var(--dim)",
-              fontFamily: "var(--body)", fontSize: 12.5, fontWeight: 500, cursor: "pointer",
-              transition: "all 0.12s",
-            }}
-          >
-            {v === "compare" ? "Karşılaştır" : v === "before" ? "Önce" : "Sonra"}
-          </button>
+      {/* Center — view toggle (plain text, underline active) */}
+      <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
+        {(["compare","before","after"] as ViewMode[]).map((v, i) => (
+          <React.Fragment key={v}>
+            {i > 0 && (
+              <span style={{ width: 1, height: 12, background: "rgba(255,255,255,0.1)", margin: "0 2px" }} />
+            )}
+            <button
+              onClick={() => setViewMode(v)}
+              style={{
+                padding: "4px 12px", border: 0, background: "transparent",
+                color: viewMode === v ? "var(--text)" : "var(--dimmer)",
+                fontFamily: "var(--body)", fontSize: 12.5,
+                fontWeight: viewMode === v ? 500 : 400,
+                cursor: "pointer", transition: "color 0.12s",
+                borderBottom: viewMode === v ? "1px solid rgba(255,255,255,0.45)" : "1px solid transparent",
+              }}
+            >
+              {v === "compare" ? "Karşılaştır" : v === "before" ? "Önce" : "Sonra"}
+            </button>
+          </React.Fragment>
         ))}
       </div>
 
-      {/* Right — zoom + download */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "flex-end" }}>
-        <div style={{
-          display: "flex", alignItems: "center", gap: 1,
-          background: "var(--bg-2)", border: "1px solid var(--border)",
-          borderRadius: 8, padding: 2,
-        }}>
-          <button onClick={() => setZoom(Math.max(0.25, zoom - 0.1))} style={zoomBtnStyle}>−</button>
-          <span style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--text)", minWidth: 42, textAlign: "center", fontVariantNumeric: "tabular-nums" }}>
-            {Math.round(zoom * 100)}%
-          </span>
-          <button onClick={() => setZoom(Math.min(3, zoom + 0.1))} style={zoomBtnStyle}>+</button>
-        </div>
+      {/* Right — zoom + download + save */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }}>
+        <button onClick={() => setZoom(Math.max(0.25, zoom - 0.1))} style={zoomBtnStyle}>−</button>
+        <span style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--dim)", minWidth: 38, textAlign: "center", fontVariantNumeric: "tabular-nums" }}>
+          {Math.round(zoom * 100)}%
+        </span>
+        <button onClick={() => setZoom(Math.min(3, zoom + 0.1))} style={zoomBtnStyle}>+</button>
+
+        <span style={{ width: 1, height: 14, background: "rgba(255,255,255,0.08)", margin: "0 4px" }} />
+
         <button
           onClick={download}
           disabled={!resultImage}
           style={{
-            width: 32, height: 32, borderRadius: 8, border: "1px solid transparent",
-            background: "transparent", color: resultImage ? "var(--dim)" : "var(--dimmer)",
+            width: 28, height: 28, border: 0, background: "transparent",
+            color: resultImage ? "var(--dim)" : "var(--dimmer)",
             cursor: resultImage ? "pointer" : "not-allowed",
-            display: "grid", placeItems: "center",
+            display: "grid", placeItems: "center", borderRadius: 6,
+            transition: "color 0.12s",
           }}
+          onMouseEnter={(e) => { if (resultImage) (e.currentTarget as HTMLButtonElement).style.color = "var(--text)"; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = resultImage ? "var(--dim)" : "var(--dimmer)"; }}
         >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
           </svg>
         </button>
-        <button
-          style={{
-            height: 32, padding: "0 14px", border: 0, borderRadius: 8,
-            background: "var(--violet)", color: "#fff",
-            fontFamily: "var(--body)", fontSize: 12.5, fontWeight: 600, cursor: "pointer",
-            boxShadow: "0 4px 14px -4px rgba(124,109,250,0.4)",
-          }}
-        >
+
+        <button style={{
+          height: 28, padding: "0 12px", border: 0, borderRadius: 6,
+          background: "linear-gradient(180deg, #8b92a8 0%, #636a7a 40%, #535a68 100%)",
+          color: "#eef0f6", fontFamily: "var(--body)", fontSize: 12, fontWeight: 600,
+          cursor: "pointer",
+          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.15), inset 0 -1px 0 rgba(0,0,0,0.3)",
+        }}>
           Buluta Kaydet
         </button>
       </div>
@@ -199,22 +190,40 @@ function CompareCanvas({
   op: Operation | undefined; viewMode: ViewMode; zoom: number;
   isGenerating: boolean; hasResult: boolean;
 }) {
-  const [pos, setPos] = useState(48);
+  const [pos, setPos] = useState(50);
   const [drag, setDrag] = useState(false);
+  const [boxW, setBoxW] = useState(0);
+  const [boxH, setBoxH] = useState(0);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef(false);
 
+  const handleBeforeLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
+    const img = e.currentTarget;
+    const maxW = Math.min(900, window.innerWidth - 460 - 80);
+    const maxH = window.innerHeight * 0.78;
+    let w = img.naturalWidth;
+    let h = img.naturalHeight;
+    if (w > maxW) { h = Math.round(h * maxW / w); w = Math.round(maxW); }
+    if (h > maxH) { w = Math.round(w * maxH / h); h = Math.round(maxH); }
+    setBoxW(w);
+    setBoxH(h);
+  }, []);
+
+  // Always-on listeners — use dragRef so there's no frame-delay timing gap
   useEffect(() => {
-    if (!drag) return;
     const move = (e: MouseEvent | TouchEvent) => {
-      if (!wrapRef.current) return;
+      if (!dragRef.current || !wrapRef.current) return;
       const rect = wrapRef.current.getBoundingClientRect();
-      const cx = "touches" in e ? e.touches[0].clientX : e.clientX;
-      const p = ((cx - rect.left) / rect.width) * 100;
-      setPos(Math.max(0, Math.min(100, p)));
+      const cx = "touches" in e ? (e as TouchEvent).touches[0].clientX : (e as MouseEvent).clientX;
+      setPos(Math.max(0, Math.min(100, ((cx - rect.left) / rect.width) * 100)));
     };
-    const up = () => setDrag(false);
+    const up = () => {
+      if (!dragRef.current) return;
+      dragRef.current = false;
+      setDrag(false);
+    };
     window.addEventListener("mousemove", move);
-    window.addEventListener("touchmove", move);
+    window.addEventListener("touchmove", move, { passive: true });
     window.addEventListener("mouseup", up);
     window.addEventListener("touchend", up);
     return () => {
@@ -223,7 +232,7 @@ function CompareCanvas({
       window.removeEventListener("mouseup", up);
       window.removeEventListener("touchend", up);
     };
-  }, [drag]);
+  }, []);
 
   const showAfter = hasResult || isGenerating;
   const showSlider = viewMode === "compare" && showAfter && !isGenerating;
@@ -263,13 +272,13 @@ function CompareCanvas({
           </p>
         </div>
       ) : (
-        <div style={{ maxWidth: "calc(100% - 64px)", maxHeight: "calc(100% - 64px)", display: "flex" }}>
+        <div>
           <div
             ref={wrapRef}
             style={{
               position: "relative",
-              maxWidth: "min(900px, calc(100vw - 460px - 80px))",
-              maxHeight: "78vh",
+              width: boxW || undefined,
+              height: boxH || undefined,
               borderRadius: 10, overflow: "hidden",
               boxShadow: "0 30px 80px -20px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.04)",
               background: "#000",
@@ -278,14 +287,31 @@ function CompareCanvas({
               transition: "transform 0.18s ease",
             }}
           >
-            {/* BEFORE layer */}
+            {/* BEFORE layer — onLoad sets explicit container dimensions */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={beforeUrl}
               alt="before"
               draggable={false}
-              style={{ display: "block", maxWidth: "100%", maxHeight: "78vh", userSelect: "none", pointerEvents: "none" }}
+              onLoad={handleBeforeLoad}
+              style={{
+                display: "block",
+                width: boxW ? "100%" : "auto",
+                height: boxH ? "100%" : "auto",
+                maxWidth: boxW ? "none" : "min(900px, calc(100vw - 460px - 80px))",
+                maxHeight: boxH ? "none" : "78vh",
+                userSelect: "none", pointerEvents: "none",
+              }}
             />
+
+            {/* Solid backdrop — prevents before image showing through transparent result (e.g. background_remove PNG) */}
+            {showAfter && (
+              <div style={{
+                position: "absolute", inset: 0, zIndex: 1,
+                background: "var(--bg)",
+                clipPath: afterClip, WebkitClipPath: afterClip,
+              }} />
+            )}
 
             {/* AFTER layer */}
             {showAfter && resultImage && (
@@ -296,8 +322,9 @@ function CompareCanvas({
                 draggable={false}
                 style={{
                   position: "absolute", inset: 0, width: "100%", height: "100%",
-                  objectFit: "cover", userSelect: "none", pointerEvents: "none",
+                  objectFit: "fill", userSelect: "none", pointerEvents: "none",
                   clipPath: afterClip, WebkitClipPath: afterClip,
+                  zIndex: 2,
                 }}
               />
             )}
@@ -330,48 +357,35 @@ function CompareCanvas({
             {/* Compare slider */}
             {showSlider && (
               <>
-                <div
+                {/* Line — left% is relative to parent, which is what we want */}
+                <div style={{
+                  position: "absolute", top: 0, bottom: 0, width: 2,
+                  left: `calc(${pos}% - 1px)`,
+                  background: "rgba(255,255,255,0.85)",
+                  zIndex: 5, pointerEvents: "none",
+                }} />
+
+                {/* Handle — sibling, same left% anchor */}
+                <button
+                  draggable={false}
+                  onMouseDown={(e) => { e.preventDefault(); dragRef.current = true; setDrag(true); }}
+                  onTouchStart={() => { dragRef.current = true; setDrag(true); }}
                   style={{
-                    position: "absolute", top: 0, bottom: 0, width: 2,
-                    background: "rgba(255,255,255,0.85)",
-                    boxShadow: "0 0 14px rgba(124,109,250,0.6)",
-                    transform: `translateX(calc(${pos}% - 1px))`,
-                    zIndex: 5, pointerEvents: "none",
+                    position: "absolute", top: "50%",
+                    left: `${pos}%`,
+                    transform: `translate(-50%, -50%) scale(${drag ? 1.1 : 1})`,
+                    width: 36, height: 36, borderRadius: "50%",
+                    background: "#fff", border: 0, color: "#111",
+                    cursor: "ew-resize", display: "grid", placeItems: "center",
+                    zIndex: 6,
+                    boxShadow: "0 4px 14px rgba(0,0,0,0.4)",
+                    transition: "transform 0.1s",
                   }}
                 >
-                  <button
-                    onMouseDown={() => setDrag(true)}
-                    onTouchStart={() => setDrag(true)}
-                    style={{
-                      position: "absolute", top: "50%", left: "50%",
-                      transform: `translate(-50%, -50%) scale(${drag ? 1.1 : 1})`,
-                      width: 36, height: 36, borderRadius: "50%",
-                      background: "#fff", border: 0, color: "#111",
-                      cursor: "ew-resize", display: "grid", placeItems: "center",
-                      pointerEvents: "auto",
-                      boxShadow: "0 6px 20px rgba(0,0,0,0.5)",
-                      transition: "transform 0.12s",
-                    }}
-                  >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                      <polyline points="15 18 9 12 15 6"/><polyline points="9 18 3 12 9 6" transform="translate(6,0)"/>
-                    </svg>
-                  </button>
-                </div>
-                <span style={{
-                  position: "absolute", top: 12, left: 12, zIndex: 4,
-                  fontFamily: "var(--mono)", fontSize: 10.5, fontWeight: 500, letterSpacing: "0.1em",
-                  padding: "4px 9px", borderRadius: 5,
-                  background: "rgba(0,0,0,0.55)", color: "rgba(255,255,255,0.85)",
-                  border: "1px solid rgba(255,255,255,0.1)", backdropFilter: "blur(6px)",
-                }}>ÖNCE</span>
-                <span style={{
-                  position: "absolute", top: 12, right: 12, zIndex: 4,
-                  fontFamily: "var(--mono)", fontSize: 10.5, fontWeight: 500, letterSpacing: "0.1em",
-                  padding: "4px 9px", borderRadius: 5,
-                  background: oc(op), color: "#fff",
-                  border: "1px solid rgba(255,255,255,0.2)", backdropFilter: "blur(6px)",
-                }}>SONRA · {op?.label}</span>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                    <polyline points="15 18 9 12 15 6"/><polyline points="9 18 3 12 9 6" transform="translate(6,0)"/>
+                  </svg>
+                </button>
               </>
             )}
           </div>
@@ -466,7 +480,7 @@ function OperationDropdown({ op, selectedId, setSelectedId }: {
               }}>{o.icon}</span>
               <span style={{ flex: 1, minWidth: 0 }}>
                 <span style={{ display: "block", fontSize: 13, fontWeight: 500, color: "var(--text)" }}>{o.label}</span>
-                <span style={{ display: "block", fontFamily: "var(--mono)", fontSize: 10, color: "var(--dim)", marginTop: 1 }}>{o.desc}</span>
+                <span style={{ display: "block", fontFamily: "var(--mono)", fontSize: 10, color: "var(--dim)", marginTop: 1 }}>{o.description}</span>
               </span>
               {selectedId === o.id && (
                 <span style={{
@@ -483,98 +497,6 @@ function OperationDropdown({ op, selectedId, setSelectedId }: {
   );
 }
 
-// ─── Provider Pill ────────────────────────────────────────────────────────────
-
-function ProviderPill({ provider, setProvider, op }: {
-  provider: string; setProvider: (p: string) => void; op: Operation | undefined;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const h = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, []);
-
-  const prov = PROVIDERS.find((p) => p.id === provider) ?? PROVIDERS[0];
-
-  return (
-    <div ref={ref} style={{ position: "relative" }}>
-      <button
-        onClick={() => setOpen((v) => !v)}
-        style={{
-          width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "10px 12px", background: "var(--bg-2)",
-          border: "1px solid var(--border)", borderRadius: 10,
-          cursor: "pointer", fontFamily: "inherit", color: "var(--text)",
-          transition: "border-color 0.15s",
-        }}
-      >
-        <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{
-            width: 7, height: 7, borderRadius: "50%", flexShrink: 0,
-            background: prov.connected ? "var(--green)" : "var(--dimmer)",
-            boxShadow: prov.connected ? "0 0 7px rgba(74,222,128,0.6)" : "none",
-          }} />
-          <span style={{ fontSize: 13, fontWeight: 500 }}>{prov.label}</span>
-          <span style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--dim)" }}>/ {prov.model}</span>
-        </span>
-        <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {op && (
-            <span style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--dim)" }}>
-              ~${op.cost.toFixed(3)} · ~{op.eta}s
-            </span>
-          )}
-          <svg width="9" height="9" viewBox="0 0 12 12" fill="none" style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform 0.2s", color: "var(--dim)" }}>
-            <path d="M2 4.5L6 8L10 4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </span>
-      </button>
-      {open && (
-        <div style={{
-          position: "absolute", top: "calc(100% + 5px)", left: 0, right: 0, zIndex: 100,
-          background: "var(--surface-3)", border: "1px solid var(--border-2)",
-          borderRadius: 10, overflow: "hidden",
-          boxShadow: "0 18px 50px -12px rgba(0,0,0,0.6)",
-          animation: "aip-slide 0.14s ease-out",
-        }}>
-          {PROVIDERS.map((p) => (
-            <button
-              key={p.id}
-              disabled={!p.connected}
-              onClick={() => { if (p.connected) { setProvider(p.id); setOpen(false); } }}
-              style={{
-                width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
-                padding: "10px 12px", background: "transparent",
-                border: 0, borderBottom: "1px solid rgba(255,255,255,0.03)",
-                cursor: p.connected ? "pointer" : "not-allowed",
-                fontFamily: "inherit", color: "var(--text)", opacity: p.connected ? 1 : 0.5,
-              }}
-            >
-              <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{
-                  width: 7, height: 7, borderRadius: "50%",
-                  background: p.connected ? "var(--green)" : "var(--dimmer)",
-                  boxShadow: p.connected ? "0 0 7px rgba(74,222,128,0.6)" : "none",
-                }} />
-                <span style={{ fontSize: 13, fontWeight: 500 }}>{p.label}</span>
-                <span style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--dim)" }}>/ {p.model}</span>
-              </span>
-              <span style={{
-                fontFamily: "var(--mono)", fontSize: 9, fontWeight: 500,
-                padding: "2px 7px", borderRadius: 999, letterSpacing: "0.06em", textTransform: "uppercase",
-                background: p.connected ? "rgba(74,222,128,0.12)" : "rgba(255,255,255,0.05)",
-                color: p.connected ? "var(--green)" : "var(--dim)",
-              }}>{p.badge}</span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ─── Parameter components ─────────────────────────────────────────────────────
 
@@ -592,14 +514,14 @@ function FieldLabel({ children, hint }: { children: React.ReactNode; hint?: stri
 }
 
 function ParamPrompt({ op, value, onChange }: { op: Operation; value: string; onChange: (v: string) => void }) {
-  const presets = PROMPT_PRESETS[op.id] ?? [];
+  const placeholder = PROMPT_PLACEHOLDERS[op.id] ?? "Ne yapmak istediğinizi açıklayın…";
   return (
     <div>
       <FieldLabel hint={`${value.length}/500`}>Prompt</FieldLabel>
       <textarea
         rows={3} maxLength={500} value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="Ne yapmak istediğinizi açıklayın…"
+        placeholder={placeholder}
         style={{
           width: "100%", background: "var(--surface)", border: `1px solid ${value ? oc(op, 0.4) : "var(--border)"}`,
           borderRadius: 8, padding: "10px 12px", fontFamily: "inherit", fontSize: 13,
@@ -607,22 +529,6 @@ function ParamPrompt({ op, value, onChange }: { op: Operation; value: string; on
           lineHeight: 1.5, transition: "border-color 0.15s",
         }}
       />
-      {presets.length > 0 && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 8 }}>
-          {presets.map((p) => (
-            <button
-              key={p} onClick={() => onChange(p)}
-              style={{
-                padding: "5px 10px", borderRadius: 999,
-                border: `1px solid ${value === p ? oc(op, 0.5) : "var(--border)"}`,
-                background: value === p ? oc(op, 0.08) : "var(--surface)",
-                color: value === p ? oc(op) : "var(--dim)",
-                fontFamily: "var(--mono)", fontSize: 10.5, cursor: "pointer", transition: "all 0.12s",
-              }}
-            >{p}</button>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
@@ -702,16 +608,248 @@ function ParamSeg({ op, label, options, value, onChange }: {
   );
 }
 
-function ParamMask({ op, maskMode, setMaskMode }: { op: Operation; maskMode: MaskMode; setMaskMode: (m: MaskMode) => void }) {
+// ─── Mask Canvas Modal ────────────────────────────────────────────────────────
+
+function MaskCanvasModal({ imageUrl, onClose, onConfirm }: {
+  imageUrl: string;
+  onClose: () => void;
+  onConfirm: (maskB64: string) => void;
+}) {
+  const [tool, setTool] = useState<MaskTool>("brush");
+  const [brushSize, setBrushSize] = useState(30);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [displaySize, setDisplaySize] = useState({ w: 0, h: 0 });
+  const isDown = useRef(false);
+  const saved = useRef<ImageData | null>(null);
+  const origin = useRef({ x: 0, y: 0 });
+
+  useEffect(() => {
+    const img = new window.Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      const maxW = Math.min(window.innerWidth * 0.88, 1100);
+      const maxH = window.innerHeight * 0.76;
+      let w = img.naturalWidth, h = img.naturalHeight;
+      if (w > maxW) { h = Math.round(h * maxW / w); w = Math.round(maxW); }
+      if (h > maxH) { w = Math.round(w * maxH / h); h = Math.round(maxH); }
+      setDisplaySize({ w, h });
+    };
+    img.src = imageUrl;
+  }, [imageUrl]);
+
+  const canvasXY = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const r = canvasRef.current!.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  };
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    isDown.current = true;
+    const p = canvasXY(e);
+    origin.current = p;
+    const ctx = canvasRef.current!.getContext("2d")!;
+    if (tool === "brush" || tool === "eraser") {
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+    } else {
+      saved.current = ctx.getImageData(0, 0, displaySize.w, displaySize.h);
+    }
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isDown.current) return;
+    const ctx = canvasRef.current!.getContext("2d")!;
+    const p = canvasXY(e);
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.lineWidth = brushSize;
+
+    if (tool === "brush") {
+      ctx.globalCompositeOperation = "source-over";
+      ctx.strokeStyle = "white";
+      ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+    } else if (tool === "eraser") {
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+      ctx.globalCompositeOperation = "source-over";
+    } else if (tool === "rect" && saved.current) {
+      ctx.putImageData(saved.current, 0, 0);
+      ctx.globalCompositeOperation = "source-over";
+      ctx.fillStyle = "rgba(255,255,255,0.9)";
+      ctx.fillRect(origin.current.x, origin.current.y, p.x - origin.current.x, p.y - origin.current.y);
+    } else if (tool === "circle" && saved.current) {
+      ctx.putImageData(saved.current, 0, 0);
+      ctx.globalCompositeOperation = "source-over";
+      const rx = Math.abs(p.x - origin.current.x) / 2;
+      const ry = Math.abs(p.y - origin.current.y) / 2;
+      const cx = Math.min(p.x, origin.current.x) + rx;
+      const cy = Math.min(p.y, origin.current.y) + ry;
+      ctx.fillStyle = "rgba(255,255,255,0.9)";
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, Math.max(rx, 1), Math.max(ry, 1), 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  };
+
+  const handleMouseUp = useCallback(() => {
+    isDown.current = false;
+    saved.current = null;
+    canvasRef.current?.getContext("2d")?.beginPath();
+  }, []);
+
+  const clearMask = () => {
+    const ctx = canvasRef.current?.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, displaySize.w, displaySize.h);
+  };
+
+  const applyMask = () => {
+    if (!canvasRef.current) return;
+    const exp = document.createElement("canvas");
+    exp.width = displaySize.w;
+    exp.height = displaySize.h;
+    const ectx = exp.getContext("2d")!;
+    ectx.fillStyle = "black";
+    ectx.fillRect(0, 0, displaySize.w, displaySize.h);
+    ectx.drawImage(canvasRef.current, 0, 0);
+    onConfirm(exp.toDataURL("image/png").split(",")[1]);
+  };
+
+  const MASK_TOOLS: { id: MaskTool; title: string; icon: React.ReactNode }[] = [
+    { id: "brush", title: "Fırça", icon: (
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M9.06 11.9l8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08"/><path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1 1 2.48 1 3.5 1 1.66 0 3-1.34 3-3s-1.34-3.04-1.5-3.04z"/>
+      </svg>
+    )},
+    { id: "eraser", title: "Silgi", icon: (
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M20 20H7L3 16l10-10 7 7-2.5 2.5"/><path d="M6 11l7 7"/>
+      </svg>
+    )},
+    { id: "rect", title: "Dikdörtgen", icon: (
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="2"/>
+      </svg>
+    )},
+    { id: "circle", title: "Elips", icon: (
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <ellipse cx="12" cy="12" rx="10" ry="7"/>
+      </svg>
+    )},
+  ];
+
+  return (
+    <div
+      style={{
+        position: "fixed", inset: 0, zIndex: 300,
+        background: "rgba(4,4,8,0.94)",
+        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14,
+      }}
+      onMouseUp={handleMouseUp}
+    >
+      <p style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--dim)", letterSpacing: "0.06em", margin: 0 }}>
+        Düzenlenecek alanı boyayın — beyaz = düzenle · siyah = koru
+      </p>
+
+      {displaySize.w > 0 && (
+        <div style={{
+          position: "relative", borderRadius: 10, overflow: "hidden",
+          boxShadow: "0 24px 64px -16px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.06)",
+        }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={imageUrl} alt="" draggable={false}
+            style={{ display: "block", width: displaySize.w, height: displaySize.h }}
+          />
+          <canvas
+            ref={canvasRef}
+            width={displaySize.w}
+            height={displaySize.h}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+            style={{
+              position: "absolute", inset: 0,
+              opacity: 0.55, mixBlendMode: "screen",
+              cursor: "crosshair", userSelect: "none",
+            }}
+          />
+        </div>
+      )}
+
+      {/* Toolbar */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 4,
+        background: "rgba(16,16,22,0.98)", border: "1px solid rgba(255,255,255,0.08)",
+        borderRadius: 12, padding: "7px 12px",
+      }}>
+        {MASK_TOOLS.map((t) => (
+          <button key={t.id} title={t.title} onClick={() => setTool(t.id)} style={{
+            width: 34, height: 34, border: 0, borderRadius: 8,
+            background: tool === t.id ? "rgba(124,110,250,0.22)" : "transparent",
+            color: tool === t.id ? "#9b8fff" : "rgba(255,255,255,0.45)",
+            cursor: "pointer", display: "grid", placeItems: "center", transition: "all 0.12s",
+          }}>{t.icon}</button>
+        ))}
+
+        <div style={{ width: 1, height: 20, background: "rgba(255,255,255,0.07)", margin: "0 6px" }} />
+
+        <input
+          type="range" min={5} max={80} value={brushSize}
+          onChange={(e) => setBrushSize(Number(e.target.value))}
+          style={{ width: 88, accentColor: "#7c6dfa", cursor: "pointer" }}
+        />
+        <span style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: "rgba(255,255,255,0.35)", minWidth: 26, textAlign: "right" }}>
+          {brushSize}
+        </span>
+
+        <div style={{ width: 1, height: 20, background: "rgba(255,255,255,0.07)", margin: "0 6px" }} />
+
+        <button onClick={clearMask} title="Temizle" style={{
+          width: 34, height: 34, border: 0, borderRadius: 8, background: "transparent",
+          color: "rgba(255,255,255,0.45)", cursor: "pointer", display: "grid", placeItems: "center",
+        }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+          </svg>
+        </button>
+
+        <div style={{ width: 1, height: 20, background: "rgba(255,255,255,0.07)", margin: "0 6px" }} />
+
+        <button onClick={onClose} style={{
+          height: 32, padding: "0 14px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)",
+          background: "transparent", color: "rgba(255,255,255,0.5)", fontFamily: "var(--body)",
+          fontSize: 12.5, cursor: "pointer",
+        }}>İptal</button>
+
+        <button onClick={applyMask} style={{
+          height: 32, padding: "0 16px", borderRadius: 8, border: 0,
+          background: "linear-gradient(180deg, #9088f0 0%, #6d5fe8 100%)",
+          color: "#fff", fontFamily: "var(--body)", fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+          boxShadow: "0 4px 14px -4px rgba(109,95,232,0.7)", marginLeft: 2,
+        }}>Uygula</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── ParamMask ────────────────────────────────────────────────────────────────
+
+function ParamMask({ op, maskMode, setMaskMode, imageUrl, maskB64, onOpenCanvas, onClearMask }: {
+  op: Operation; maskMode: MaskMode; setMaskMode: (m: MaskMode) => void;
+  imageUrl: string | null; maskB64: string | null;
+  onOpenCanvas: () => void; onClearMask: () => void;
+}) {
   const modes = [
     { id: "brush" as MaskMode, label: "Fırça", icon: "✏", desc: "Düzenlenecek alanı boyayın" },
     { id: "box"   as MaskMode, label: "Kutu",  icon: "▢", desc: "Dikdörtgen seçim yapın"    },
     { id: "smart" as MaskMode, label: "Akıllı",icon: "◈", desc: "Nesneye tıklayın"          },
   ];
-  const active = modes.find((m) => m.id === maskMode) ?? modes[0];
   return (
     <div>
-      <FieldLabel hint="Zorunlu">Maske</FieldLabel>
+      <FieldLabel hint="Zorunlu">Fotoğraf üzerinde mask çiz</FieldLabel>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 5, marginBottom: 10 }}>
         {modes.map((m) => {
           const sel = maskMode === m.id;
@@ -731,25 +869,29 @@ function ParamMask({ op, maskMode, setMaskMode }: { op: Operation; maskMode: Mas
           );
         })}
       </div>
-      <div style={{
-        background: "var(--surface)", border: `1px dashed ${oc(op, 0.3)}`,
-        borderRadius: 9, padding: 12, display: "flex", flexDirection: "column", gap: 10,
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{
-            width: 28, height: 28, borderRadius: 7, flexShrink: 0,
-            background: oc(op, 0.16), color: oc(op),
-            display: "grid", placeItems: "center", fontSize: 13,
-          }}>{active.icon}</span>
-          <div>
-            <div style={{ fontSize: 12.5, fontWeight: 500, color: "var(--text)" }}>{active.label} modu</div>
-            <div style={{ fontFamily: "var(--mono)", fontSize: 10, color: "var(--dim)", marginTop: 2 }}>{active.desc}</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <button onClick={onOpenCanvas} style={miniBtn}>
+          {maskB64 ? "Tuvale aç · Düzenle" : "Tuvale aç"}
+        </button>
+        {maskB64 && (
+          <div style={{ position: "relative", borderRadius: 6, overflow: "hidden", lineHeight: 0 }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={`data:image/png;base64,${maskB64}`} alt="mask"
+              style={{ width: "100%", maxHeight: 80, objectFit: "cover", borderRadius: 6, opacity: 0.8, display: "block" }}
+            />
+            <button
+              onClick={onClearMask}
+              title="Temizle"
+              style={{
+                position: "absolute", top: 4, right: 4,
+                width: 20, height: 20, borderRadius: 4, border: 0,
+                background: "rgba(0,0,0,0.6)", color: "rgba(255,255,255,0.7)",
+                cursor: "pointer", display: "grid", placeItems: "center", fontSize: 11,
+              }}
+            >×</button>
           </div>
-        </div>
-        <div style={{ display: "flex", gap: 6 }}>
-          <button style={miniBtn}>Tuvale aç</button>
-          <button style={{ ...miniBtn, background: "transparent", color: "var(--dim)" }}>Temizle</button>
-        </div>
+        )}
       </div>
     </div>
   );
@@ -765,19 +907,23 @@ const miniBtn: React.CSSProperties = {
 // ─── AI Edit Panel ────────────────────────────────────────────────────────────
 
 function AIEditPanel({
-  selectedId, setSelectedId, params, setParam, provider, setProvider,
-  maskMode, setMaskMode, onSubmit, isGenerating, genMs,
+  selectedId, setSelectedId, params, setParam,
+  maskMode, setMaskMode, imageUrl, maskB64, onOpenMask, onClearMask,
+  onSubmit, isGenerating, isQueued, genMs,
 }: {
   selectedId: OpId | null;
   setSelectedId: (id: OpId) => void;
   params: EditParams;
   setParam: (k: keyof EditParams, v: EditParams[keyof EditParams]) => void;
-  provider: string;
-  setProvider: (p: string) => void;
   maskMode: MaskMode;
   setMaskMode: (m: MaskMode) => void;
+  imageUrl: string | null;
+  maskB64: string | null;
+  onOpenMask: () => void;
+  onClearMask: () => void;
   onSubmit: () => void;
   isGenerating: boolean;
+  isQueued: boolean;
   genMs: number;
 }) {
   const op = OPERATIONS.find((o) => o.id === selectedId);
@@ -785,7 +931,7 @@ function AIEditPanel({
   return (
     <aside style={{
       width: 420, flexShrink: 0, height: "100%",
-      background: "var(--surface)", borderLeft: "1px solid var(--border)",
+      background: "var(--bg)", borderLeft: "1px solid rgba(255,255,255,0.05)",
       display: "flex", flexDirection: "column", fontFamily: "var(--body)",
     }}>
       {/* Accent strip */}
@@ -796,11 +942,25 @@ function AIEditPanel({
       }} />
 
       {/* Header */}
-      <header style={{ padding: "14px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 9 }}>
-        <span style={{ fontSize: 13, color: "var(--violet)", textShadow: "0 0 8px rgba(124,109,250,0.4)" }}>✦</span>
-        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", letterSpacing: "-0.005em" }}>AI Düzenle</span>
+      <header style={{
+        padding: "14px 20px 12px", borderBottom: "1px solid rgba(255,255,255,0.05)",
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+      }}>
+        {/* Left — active model name */}
+        <span style={{
+          fontFamily: "'Eightgon', sans-serif",
+          fontSize: 11, letterSpacing: "0.04em",
+          color: op ? oc(op, 0.75) : "var(--dimmer)",
+          transition: "color 0.2s",
+          minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          maxWidth: 220,
+        }}>
+          {op ? op.model : "—"}
+        </span>
+
+        {/* Right — timer */}
         {isGenerating && (
-          <span style={{ marginLeft: "auto", fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--dim)" }}>
+          <span style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--dim)", flexShrink: 0 }}>
             {(genMs / 1000).toFixed(1)}s…
           </span>
         )}
@@ -809,8 +969,7 @@ function AIEditPanel({
       {/* Body */}
       <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 16, padding: "18px 20px 22px" }}>
         {/* Operation */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <FieldLabel>İşlem</FieldLabel>
+        <div>
           <OperationDropdown op={op} selectedId={selectedId} setSelectedId={setSelectedId} />
         </div>
 
@@ -837,12 +996,16 @@ function AIEditPanel({
             )}
             {op.params.includes("description") && (
               <ParamText
-                label="Restorasyon İpucu" placeholder="Çizikleri onar, renkleri iyileştir…"
+                label="Restorasyon İpucu" placeholder="Çizikleri düzelt, renkleri iyileştir…"
                 value={params.description} onChange={(v) => setParam("description", v)}
               />
             )}
             {op.params.includes("mask") && (
-              <ParamMask op={op} maskMode={maskMode} setMaskMode={setMaskMode} />
+              <ParamMask
+                op={op} maskMode={maskMode} setMaskMode={setMaskMode}
+                imageUrl={imageUrl} maskB64={maskB64}
+                onOpenCanvas={onOpenMask} onClearMask={onClearMask}
+              />
             )}
             {op.params.includes("strength") && (
               <ParamSlider op={op} label="Güç" min={0} max={1} step={0.05}
@@ -881,59 +1044,44 @@ function AIEditPanel({
             }}>{op.icon}</span>
             <div>
               <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>Parametre gerekmez</div>
-              <div style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--dim)", marginTop: 3 }}>{op.desc}.</div>
+              <div style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--dim)", marginTop: 3 }}>{op.description}.</div>
             </div>
           </div>
         )}
 
-        <div style={{ height: 1, background: "var(--border)", margin: "2px 0" }} />
-
-        {/* Provider */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <FieldLabel>Sağlayıcı</FieldLabel>
-          <ProviderPill provider={provider} setProvider={setProvider} op={op} />
-        </div>
-
         {/* Submit */}
         <button
           onClick={onSubmit}
-          disabled={!op || isGenerating}
+          disabled={!op || isGenerating || isQueued}
           style={{
-            width: "100%", height: 46, border: 0, borderRadius: 11,
+            width: "100%", height: 46, borderRadius: 11,
+            border: "1px solid rgba(255,255,255,0.10)",
             fontFamily: "var(--body)", fontSize: 13.5, fontWeight: 600,
-            cursor: !op || isGenerating ? "not-allowed" : "pointer",
-            position: "relative", display: "flex", alignItems: "center",
+            cursor: !op || isGenerating || isQueued ? "not-allowed" : "pointer",
+            display: "flex", alignItems: "center",
             justifyContent: "center", gap: 10, marginTop: 4,
-            background: op
-              ? `linear-gradient(135deg, ${oc(op)}, ${oc(op, 0.7)})`
-              : "rgba(255,255,255,0.04)",
-            color: op ? "#fff" : "var(--dim)",
-            boxShadow: op ? `0 8px 28px -8px ${oc(op, 0.55)}, inset 0 1px 0 rgba(255,255,255,0.1)` : "none",
-            transition: "all 0.18s",
-            overflow: "hidden",
+            background: isQueued
+              ? "linear-gradient(180deg, #5a8a6a 0%, #3d6b50 50%, #336045 100%)"
+              : op
+                ? "linear-gradient(180deg, #9aa2b2 0%, #737a8a 35%, #5e6474 65%, #525769 100%)"
+                : "linear-gradient(180deg, #3a3d47 0%, #2e3039 100%)",
+            color: isQueued ? "#c8f0d8" : op ? "#f0f2f8" : "var(--dimmer)",
+            boxShadow: op && !isQueued
+              ? "inset 0 1px 0 rgba(255,255,255,0.18), inset 0 -1px 0 rgba(0,0,0,0.35), 0 2px 6px rgba(0,0,0,0.5)"
+              : isQueued
+                ? "inset 0 1px 0 rgba(255,255,255,0.15), inset 0 -1px 0 rgba(0,0,0,0.3)"
+                : "inset 0 1px 0 rgba(255,255,255,0.04)",
+            transition: "opacity 0.15s",
+            opacity: isGenerating ? 0.75 : 1,
           }}
         >
-          <span style={{ zIndex: 1 }}>
-            {isGenerating ? "Oluşturuluyor…" : op ? `${op.label} Uygula` : "Önce bir işlem seçin"}
-          </span>
-          {op && !isGenerating && (
-            <span style={{ display: "flex", gap: 3, zIndex: 1 }}>
+          {isQueued ? "✓ Sıraya Alındı" : isGenerating ? "Oluşturuluyor…" : op ? `${op.label} Çalıştır` : "Önce bir işlem seçin"}
+          {op && !isGenerating && !isQueued && (
+            <span style={{ display: "flex", gap: 3 }}>
               <kbd style={kbdStyle}>⌘</kbd>
               <kbd style={kbdStyle}>↵</kbd>
             </span>
           )}
-          {isGenerating && (
-            <div style={{
-              position: "absolute", inset: 0,
-              background: "linear-gradient(110deg, transparent 30%, rgba(255,255,255,0.3) 50%, transparent 70%)",
-              backgroundSize: "200% 100%",
-              animation: "aip-shimmer 1.4s linear infinite",
-              pointerEvents: "none",
-            }} />
-          )}
-          <style>{`
-            @keyframes aip-shimmer { from { background-position:100% 0; } to { background-position:-100% 0; } }
-          `}</style>
         </button>
       </div>
     </aside>
@@ -1215,8 +1363,9 @@ export default function EditPage() {
   });
   const setParam = (k: keyof EditParams, v: EditParams[keyof EditParams]) =>
     setParamsState((p) => ({ ...p, [k]: v }));
-  const [provider, setProvider] = useState("replicate");
   const [maskMode, setMaskMode] = useState<MaskMode>("brush");
+  const [maskB64, setMaskB64] = useState<string | null>(null);
+  const [maskOpen, setMaskOpen] = useState(false);
 
   // Canvas / view
   const [zoom, setZoom] = useState(1);
@@ -1224,8 +1373,10 @@ export default function EditPage() {
 
   // Generation
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isQueued, setIsQueued] = useState(false);
   const [hasResult, setHasResult] = useState(false);
   const [resultImage, setResultImage] = useState<string | null>(null);
+  const [beforeFullImage, setBeforeFullImage] = useState<string | null>(null);
   const [genStart, setGenStart] = useState(0);
   const [genMs, setGenMs] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -1274,7 +1425,7 @@ export default function EditPage() {
         source: activeImage.source === "local" ? "gdrive" : activeImage.source,
         file_id: activeImage.file_id ?? "",
         image_b64: activeImage.b64,
-        edit_provider: provider,
+        edit_provider: "replicate",
         islem: selectedId,
         prompt: op.params.includes("prompt") ? params.prompt || undefined : undefined,
         guc: op.params.includes("strength") ? params.strength : undefined,
@@ -1282,20 +1433,24 @@ export default function EditPage() {
         genisletme_px: op.params.includes("pixels") ? params.pixels : undefined,
         olcek: op.params.includes("scale") ? params.scale as 2 | 4 : undefined,
         aciklama: op.params.includes("description") ? params.description || undefined : undefined,
+        maske_b64: op.params.includes("mask") ? maskB64 ?? undefined : undefined,
       };
 
       const res = await editApi.edit(body);
 
       if (res.hata) throw new Error(res.hata);
 
-      setResultImage(`data:image/jpeg;base64,${res.sonuc_b64}`);
+      setResultImage(`data:${res.mime_type};base64,${res.sonuc_b64}`);
+      if (res.gorsel_b64) setBeforeFullImage(`data:image/jpeg;base64,${res.gorsel_b64}`);
       setHasResult(true);
+      setIsQueued(true);
+      setTimeout(() => setIsQueued(false), 2000);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "AI düzenleme başarısız");
     } finally {
       setIsGenerating(false);
     }
-  }, [selectedId, isGenerating, activeImage, provider, params]);
+  }, [selectedId, isGenerating, activeImage, params]);
 
   // Cmd+Enter / Ctrl+Enter hotkey
   useEffect(() => {
@@ -1324,13 +1479,13 @@ export default function EditPage() {
             zoom={zoom} setZoom={setZoom}
             resultImage={resultImage} filename={filename}
             hasImage={!!activeImage}
-            onChangeImage={() => { setPickedImage(null); setHasResult(false); setResultImage(null); }}
+            onChangeImage={() => { setPickedImage(null); setHasResult(false); setResultImage(null); setBeforeFullImage(null); setMaskB64(null); }}
           />
           {!activeImage ? (
-            <ImagePicker onPick={(img) => { setPickedImage(img); setHasResult(false); setResultImage(null); }} />
+            <ImagePicker onPick={(img) => { setPickedImage(img); setHasResult(false); setResultImage(null); setBeforeFullImage(null); setMaskB64(null); }} />
           ) : (
             <CompareCanvas
-              beforeUrl={beforeUrl} resultImage={resultImage}
+              beforeUrl={beforeFullImage ?? beforeUrl} resultImage={resultImage}
               op={OPERATIONS.find((o) => o.id === selectedId)}
               viewMode={viewMode} zoom={zoom}
               isGenerating={isGenerating} hasResult={hasResult}
@@ -1359,11 +1514,22 @@ export default function EditPage() {
         <AIEditPanel
           selectedId={selectedId} setSelectedId={setSelectedId}
           params={params} setParam={setParam}
-          provider={provider} setProvider={setProvider}
           maskMode={maskMode} setMaskMode={setMaskMode}
+          imageUrl={beforeUrl} maskB64={maskB64}
+          onOpenMask={() => { if (beforeUrl) setMaskOpen(true); }}
+          onClearMask={() => setMaskB64(null)}
           onSubmit={handleSubmit}
-          isGenerating={isGenerating} genMs={genMs}
+          isGenerating={isGenerating} isQueued={isQueued} genMs={genMs}
         />
+
+        {/* Mask canvas modal */}
+        {maskOpen && beforeUrl && (
+          <MaskCanvasModal
+            imageUrl={beforeUrl}
+            onClose={() => setMaskOpen(false)}
+            onConfirm={(b64) => { setMaskB64(b64); setMaskOpen(false); }}
+          />
+        )}
       </div>
     </div>
   );
