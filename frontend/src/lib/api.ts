@@ -220,8 +220,10 @@ export interface NewEditRequest {
   prompt?: string;
   maske_b64?: string;
   guc?: number;
-  yon?: string;
-  genisletme_px?: number;
+  outpaint_modu?: string;
+  adimlar?: number;
+  kilavuz?: number;
+  guvenlik?: number;
   olcek?: number;
   aciklama?: string;
 }

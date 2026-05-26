@@ -48,7 +48,7 @@ class BaseEditProvider(ABC):
     def inpaint(self, gorsel: Image.Image, maske: Image.Image, prompt: str, guc: float = 0.85) -> EditSonucu: ...
 
     @abstractmethod
-    def outpaint(self, gorsel: Image.Image, prompt: str, yon: str = "right", px: int = 256) -> EditSonucu: ...
+    def outpaint(self, gorsel: Image.Image, prompt: str, outpaint_modu: str = "Zoom out 2x", steps: int = 50, guidance: float = 3.0, safety_tolerance: int = 2) -> EditSonucu: ...
 
     @abstractmethod
     def background_remove(self, gorsel: Image.Image) -> EditSonucu: ...
@@ -72,8 +72,10 @@ class BaseEditProvider(ABC):
         maske: Optional[Image.Image] = None,
         prompt: Optional[str] = None,
         guc: float = 0.85,
-        yon: str = "right",
-        genisletme_px: int = 256,
+        outpaint_modu: str = "Zoom out 2x",
+        adimlar: int = 50,
+        kilavuz: float = 3.0,
+        guvenlik: int = 2,
         olcek: int = 2,
         aciklama: str = "Fix scratches, damage, and improve overall quality",
     ) -> EditSonucu:
@@ -81,16 +83,16 @@ class BaseEditProvider(ABC):
             raise EditHatasi(islem, f"Bu işlem desteklenmiyor. Desteklenenler: {[i.value for i in self.desteklenen_islemler]}", self.provider_adi)
 
         if islem == EditIslemi.INPAINTING and maske is None:
-            raise EditHatasi(islem, "'maske' parametresi zorunlu", self.provider_adi)
+            raise EditHatasi(islem, "Önce bir maske çizin", self.provider_adi)
 
         if islem in (EditIslemi.INPAINTING, EditIslemi.OUTPAINTING, EditIslemi.STIL_TRANSFER, EditIslemi.TEXT_EDIT) and not prompt:
-            raise EditHatasi(islem, "'prompt' parametresi zorunlu", self.provider_adi)
+            raise EditHatasi(islem, "Prompt alanını doldurun", self.provider_adi)
 
         match islem:
             case EditIslemi.INPAINTING:
                 return self.inpaint(gorsel, maske, prompt, guc)
             case EditIslemi.OUTPAINTING:
-                return self.outpaint(gorsel, prompt, yon, genisletme_px)
+                return self.outpaint(gorsel, prompt, outpaint_modu, adimlar, kilavuz, guvenlik)
             case EditIslemi.BACKGROUND_REMOVE:
                 return self.background_remove(gorsel)
             case EditIslemi.RESTORE:

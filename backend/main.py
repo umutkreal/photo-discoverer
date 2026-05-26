@@ -817,8 +817,10 @@ class EditIstek(BaseModel):
     prompt:        Optional[str]  = None
     maske_b64:     Optional[str]  = None
     guc:           float          = Field(0.85, ge=0.0, le=1.0)
-    yon:           str            = Field("right", pattern="^(left|right|up|down)$")
-    genisletme_px: int            = Field(256, ge=64, le=1024)
+    outpaint_modu: str            = "Zoom out 2x"
+    adimlar:       int            = Field(50, ge=1, le=50)
+    kilavuz:       float          = Field(3.0, ge=1.0, le=10.0)
+    guvenlik:      int            = Field(2, ge=0, le=6)
     olcek:         int            = Field(2, ge=2, le=4)
     aciklama:      str            = "Fix scratches, damage, and improve overall quality"
 
@@ -876,14 +878,16 @@ async def fotograf_duzenle(
                 maske=maske,
                 prompt=istek.prompt,
                 guc=istek.guc,
-                yon=istek.yon,
-                genisletme_px=istek.genisletme_px,
+                outpaint_modu=istek.outpaint_modu,
+                adimlar=istek.adimlar,
+                kilavuz=istek.kilavuz,
+                guvenlik=istek.guvenlik,
                 olcek=istek.olcek,
                 aciklama=istek.aciklama,
             ),
         )
     except EditHatasi as e:
-        return {"hata": str(e)}
+        return {"hata": e.message}
 
     # 4. Sonucu base64'e çevir
     buf = BytesIO()

@@ -22,13 +22,6 @@ _MODELLER = {
     "remove_background":  "bria/remove-background",
 }
 
-_YON_MAP = {
-    "left":  "padding_left",
-    "right": "padding_right",
-    "up":    "padding_top",
-    "down":  "padding_bottom",
-}
-
 
 class ReplicateEditProvider(BaseEditProvider):
 
@@ -63,16 +56,18 @@ class ReplicateEditProvider(BaseEditProvider):
             raise EditHatasi(EditIslemi.INPAINTING, str(e), self.provider_adi)
         return EditSonucu(gorsel=self._output_to_pil(output), model=model)
 
-    def outpaint(self, gorsel: Image.Image, prompt: str, yon: str = "right", px: int = 256) -> EditSonucu:
+    def outpaint(self, gorsel: Image.Image, prompt: str, outpaint_modu: str = "Zoom out 2x", steps: int = 50, guidance: float = 3.0, safety_tolerance: int = 2) -> EditSonucu:
         model = _MODELLER["flux_fill_pro"]
-        padding_key = _YON_MAP.get(yon, "padding_right")
         try:
             output = replicate.run(model, input={
-                "image":          self._pil_to_file(gorsel, "RGB"),
-                "prompt":         prompt,
-                "output_format":  "jpg",
-                "output_quality": 92,
-                padding_key:      px,
+                "image":            self._pil_to_file(gorsel, "RGB"),
+                "prompt":           prompt,
+                "outpaint":         outpaint_modu,
+                "steps":            steps,
+                "guidance":         guidance,
+                "safety_tolerance": safety_tolerance,
+                "output_format":    "jpg",
+                "output_quality":   92,
             })
         except Exception as e:
             raise EditHatasi(EditIslemi.OUTPAINTING, str(e), self.provider_adi)

@@ -23,14 +23,15 @@ interface Operation {
 
 interface EditParams {
   prompt: string; description: string;
-  strength: number; direction: string; pixels: number; scale: number;
+  strength: number; steps: number; guidance: number; safety_tolerance: number; scale: number;
+  outpaint_mode: string;
 }
 
 // ─── Data ────────────────────────────────────────────────────────────────────
 
 const OPERATIONS: Operation[] = [
   { id: "inpainting",        label: "Inpainting",         icon: "✦", description: "Masked alanı yeni içerikle doldur",       color: "#7C6AF7", params: ["prompt","mask","strength"], model: "black-forest-labs/flux-fill-pro"      },
-  { id: "outpainting",       label: "Outpainting",        icon: "⊞", description: "Görüntüyü kenarından genişlet",           color: "#5BA4F5", params: ["prompt","direction","pixels"], model: "black-forest-labs/flux-fill-pro"  },
+  { id: "outpainting",       label: "Outpainting",        icon: "⊞", description: "Görüntüyü kenarından genişlet",           color: "#5BA4F5", params: ["outpaint_mode","prompt","steps","guidance","safety_tolerance"], model: "black-forest-labs/flux-fill-pro"  },
   { id: "style_transfer",    label: "Stil Transferi",     icon: "◫", description: "Promptla görüntünün stilini dönüştür",   color: "#4FC08D", params: ["prompt"],                   model: "black-forest-labs/flux-kontext-pro"  },
   { id: "background_remove", label: "Arka Plan Kaldır",   icon: "⬡", description: "Arka planı kaldır, şeffaf PNG çıkar",     color: "#E879A0", params: [],                           model: "bria/remove-background"              },
   { id: "text_edit",         label: "Metin ile Düzenle",  icon: "✎", description: "Doğal dil talimatıyla serbest düzenle",   color: "#F472B6", params: ["prompt"],                   model: "black-forest-labs/flux-kontext-max"  },
@@ -41,7 +42,7 @@ const OPERATIONS: Operation[] = [
 
 const PROMPT_PLACEHOLDERS: Partial<Record<OpId, string>> = {
   inpainting:      "Seçili alanı doldur: mavi gökyüzü…",
-  outpainting:     "Genişletilecek alanı açıkla…",
+  outpainting:     "Zoom out 2x, extend left, add sky above…",
   style_transfer:  "Stili dönüştür: empresyonist resim gibi…",
   text_edit:       "Ne yapmak istediğini yaz…",
 };
@@ -576,6 +577,29 @@ function ParamSlider({ op, label, min, max, step, value, onChange, format }: {
   );
 }
 
+function ParamSelect({ op, label, options, value, onChange }: {
+  op: Operation; label: string; options: string[];
+  value: string; onChange: (v: string) => void;
+}) {
+  return (
+    <div>
+      <FieldLabel>{label}</FieldLabel>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        style={{
+          width: "100%", padding: "8px 10px", borderRadius: 8,
+          border: `1px solid ${oc(op, 0.35)}`, background: "var(--surface)",
+          color: "var(--text)", fontFamily: "var(--mono)", fontSize: 12,
+          cursor: "pointer", outline: "none",
+        }}
+      >
+        {options.map((o) => <option key={o} value={o}>{o}</option>)}
+      </select>
+    </div>
+  );
+}
+
 function ParamSeg({ op, label, options, value, onChange }: {
   op: Operation; label: string;
   options: { value: string | number; label: string }[];
@@ -616,12 +640,14 @@ function MaskCanvasModal({ imageUrl, onClose, onConfirm }: {
   onConfirm: (maskB64: string) => void;
 }) {
   const [tool, setTool] = useState<MaskTool>("brush");
-  const [brushSize, setBrushSize] = useState(30);
+  const [brushSize, setBrushSize] = useState(15);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [displaySize, setDisplaySize] = useState({ w: 0, h: 0 });
   const isDown = useRef(false);
   const saved = useRef<ImageData | null>(null);
   const origin = useRef({ x: 0, y: 0 });
+  const history = useRef<ImageData[]>([]);
+  const [canUndo, setCanUndo] = useState(false);
 
   useEffect(() => {
     const img = new window.Image();
@@ -642,11 +668,40 @@ function MaskCanvasModal({ imageUrl, onClose, onConfirm }: {
     return { x: e.clientX - r.left, y: e.clientY - r.top };
   };
 
+  const pushHistory = useCallback(() => {
+    const ctx = canvasRef.current?.getContext("2d");
+    if (!ctx) return;
+    history.current.push(ctx.getImageData(0, 0, displaySize.w, displaySize.h));
+    if (history.current.length > 40) history.current.shift();
+    setCanUndo(true);
+  }, [displaySize]);
+
+  const undo = useCallback(() => {
+    const snap = history.current.pop();
+    const ctx = canvasRef.current?.getContext("2d");
+    if (!ctx) return;
+    if (snap) {
+      ctx.putImageData(snap, 0, 0);
+    } else {
+      ctx.clearRect(0, 0, displaySize.w, displaySize.h);
+    }
+    setCanUndo(history.current.length > 0);
+  }, [displaySize]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "z") { e.preventDefault(); undo(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [undo]);
+
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     isDown.current = true;
     const p = canvasXY(e);
     origin.current = p;
     const ctx = canvasRef.current!.getContext("2d")!;
+    pushHistory();
     if (tool === "brush" || tool === "eraser") {
       ctx.beginPath();
       ctx.moveTo(p.x, p.y);
@@ -663,10 +718,11 @@ function MaskCanvasModal({ imageUrl, onClose, onConfirm }: {
     ctx.lineJoin = "round";
     ctx.lineWidth = brushSize;
 
-    const PAINT = "rgba(80, 60, 240, 0.82)";
+    const BRUSH  = "rgba(80, 60, 240, 0.82)";
+    const SHAPE  = "rgb(80, 60, 240)";
     if (tool === "brush") {
       ctx.globalCompositeOperation = "source-over";
-      ctx.strokeStyle = PAINT;
+      ctx.strokeStyle = BRUSH;
       ctx.lineTo(p.x, p.y);
       ctx.stroke();
     } else if (tool === "eraser") {
@@ -677,7 +733,7 @@ function MaskCanvasModal({ imageUrl, onClose, onConfirm }: {
     } else if (tool === "rect" && saved.current) {
       ctx.putImageData(saved.current, 0, 0);
       ctx.globalCompositeOperation = "source-over";
-      ctx.fillStyle = PAINT;
+      ctx.fillStyle = SHAPE;
       ctx.fillRect(origin.current.x, origin.current.y, p.x - origin.current.x, p.y - origin.current.y);
     } else if (tool === "circle" && saved.current) {
       ctx.putImageData(saved.current, 0, 0);
@@ -686,7 +742,7 @@ function MaskCanvasModal({ imageUrl, onClose, onConfirm }: {
       const ry = Math.abs(p.y - origin.current.y) / 2;
       const cx = Math.min(p.x, origin.current.x) + rx;
       const cy = Math.min(p.y, origin.current.y) + ry;
-      ctx.fillStyle = PAINT;
+      ctx.fillStyle = SHAPE;
       ctx.beginPath();
       ctx.ellipse(cx, cy, Math.max(rx, 1), Math.max(ry, 1), 0, 0, Math.PI * 2);
       ctx.fill();
@@ -702,6 +758,7 @@ function MaskCanvasModal({ imageUrl, onClose, onConfirm }: {
   const clearMask = () => {
     const ctx = canvasRef.current?.getContext("2d");
     if (!ctx) return;
+    pushHistory();
     ctx.clearRect(0, 0, displaySize.w, displaySize.h);
   };
 
@@ -725,22 +782,22 @@ function MaskCanvasModal({ imageUrl, onClose, onConfirm }: {
 
   const MASK_TOOLS: { id: MaskTool; title: string; icon: React.ReactNode }[] = [
     { id: "brush", title: "Fırça", icon: (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M9.06 11.9l8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08"/><path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1 1 2.48 1 3.5 1 1.66 0 3-1.34 3-3s-1.34-3.04-1.5-3.04z"/>
       </svg>
     )},
     { id: "eraser", title: "Silgi", icon: (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M20 20H7L3 16l10-10 7 7-2.5 2.5"/><path d="M6 11l7 7"/>
       </svg>
     )},
     { id: "rect", title: "Dikdörtgen", icon: (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <rect x="3" y="3" width="18" height="18" rx="2"/>
       </svg>
     )},
     { id: "circle", title: "Elips", icon: (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <ellipse cx="12" cy="12" rx="10" ry="7"/>
       </svg>
     )},
@@ -756,7 +813,7 @@ function MaskCanvasModal({ imageUrl, onClose, onConfirm }: {
       onMouseUp={handleMouseUp}
     >
       <p style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--dim)", letterSpacing: "0.06em", margin: 0 }}>
-        Düzenlenecek alanı boyayın — beyaz = düzenle · siyah = koru
+        Düzenlenecek alanı boyayın — koyu = düzenle
       </p>
 
       {displaySize.w > 0 && (
@@ -765,76 +822,85 @@ function MaskCanvasModal({ imageUrl, onClose, onConfirm }: {
           boxShadow: "0 24px 64px -16px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.06)",
         }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={imageUrl} alt="" draggable={false}
+          <img src={imageUrl} alt="" draggable={false}
             style={{ display: "block", width: displaySize.w, height: displaySize.h }}
           />
           <canvas
-            ref={canvasRef}
-            width={displaySize.w}
-            height={displaySize.h}
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseUp}
-            style={{
-              position: "absolute", inset: 0,
-              cursor: "crosshair", userSelect: "none",
-            }}
+            ref={canvasRef} width={displaySize.w} height={displaySize.h}
+            onMouseDown={handleMouseDown} onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}
+            style={{ position: "absolute", inset: 0, cursor: "crosshair", userSelect: "none" }}
           />
         </div>
       )}
 
-      {/* Toolbar */}
+      {/* Horizontal toolbar */}
       <div style={{
-        display: "flex", alignItems: "center", gap: 4,
-        background: "rgba(16,16,22,0.98)", border: "1px solid rgba(255,255,255,0.08)",
-        borderRadius: 12, padding: "7px 12px",
+        display: "flex", alignItems: "center", gap: 6,
+        background: "rgba(16,16,22,0.98)", border: "1px solid rgba(255,255,255,0.1)",
+        borderRadius: 16, padding: "10px 16px",
+        boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
       }}>
         {MASK_TOOLS.map((t) => (
           <button key={t.id} title={t.title} onClick={() => setTool(t.id)} style={{
-            width: 34, height: 34, border: 0, borderRadius: 8,
-            background: tool === t.id ? "rgba(124,110,250,0.22)" : "transparent",
-            color: tool === t.id ? "#9b8fff" : "rgba(255,255,255,0.45)",
+            width: 44, height: 44, border: 0, borderRadius: 10,
+            background: tool === t.id ? "rgba(124,110,250,0.25)" : "transparent",
+            color: tool === t.id ? "#b8adff" : "rgba(255,255,255,0.45)",
             cursor: "pointer", display: "grid", placeItems: "center", transition: "all 0.12s",
+            boxShadow: tool === t.id ? "0 0 0 1px rgba(124,110,250,0.45)" : "none",
           }}>{t.icon}</button>
         ))}
 
-        <div style={{ width: 1, height: 20, background: "rgba(255,255,255,0.07)", margin: "0 6px" }} />
+        <div style={{ width: 1, height: 28, background: "rgba(255,255,255,0.08)", margin: "0 4px" }} />
+
+        <button onClick={undo} title="Geri Al (Ctrl+Z)" disabled={!canUndo} style={{
+          width: 44, height: 44, border: 0, borderRadius: 10, background: "transparent",
+          color: canUndo ? "rgba(255,255,255,0.45)" : "rgba(255,255,255,0.15)",
+          cursor: canUndo ? "pointer" : "not-allowed", display: "grid", placeItems: "center", transition: "color 0.12s",
+        }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 7v6h6"/><path d="M3 13C5.5 6.5 14 4 20 8"/>
+          </svg>
+        </button>
+
+        <div style={{ width: 1, height: 28, background: "rgba(255,255,255,0.08)", margin: "0 4px" }} />
 
         <input
-          type="range" min={5} max={80} value={brushSize}
-          onChange={(e) => setBrushSize(Number(e.target.value))}
-          style={{ width: 88, accentColor: "#7c6dfa", cursor: "pointer" }}
+          type="number" min={1} max={200} value={brushSize}
+          onChange={(e) => setBrushSize(Math.max(1, Math.min(200, Number(e.target.value))))}
+          style={{
+            width: 54, background: "rgba(255,255,255,0.07)",
+            border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8,
+            color: "rgba(255,255,255,0.9)", fontFamily: "var(--mono)", fontSize: 15,
+            fontWeight: 600, textAlign: "center", padding: "0 4px", height: 44,
+            outline: "none", boxSizing: "border-box",
+          }}
         />
-        <span style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: "rgba(255,255,255,0.35)", minWidth: 26, textAlign: "right" }}>
-          {brushSize}
-        </span>
 
-        <div style={{ width: 1, height: 20, background: "rgba(255,255,255,0.07)", margin: "0 6px" }} />
+        <div style={{ width: 1, height: 28, background: "rgba(255,255,255,0.08)", margin: "0 4px" }} />
 
         <button onClick={clearMask} title="Temizle" style={{
-          width: 34, height: 34, border: 0, borderRadius: 8, background: "transparent",
+          width: 44, height: 44, border: 0, borderRadius: 10, background: "transparent",
           color: "rgba(255,255,255,0.45)", cursor: "pointer", display: "grid", placeItems: "center",
         }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
           </svg>
         </button>
 
-        <div style={{ width: 1, height: 20, background: "rgba(255,255,255,0.07)", margin: "0 6px" }} />
+        <div style={{ width: 1, height: 28, background: "rgba(255,255,255,0.08)", margin: "0 4px" }} />
 
         <button onClick={onClose} style={{
-          height: 32, padding: "0 14px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)",
-          background: "transparent", color: "rgba(255,255,255,0.5)", fontFamily: "var(--body)",
-          fontSize: 12.5, cursor: "pointer",
+          height: 44, padding: "0 18px", borderRadius: 10, border: 0,
+          background: "transparent", color: "rgba(255,255,255,0.45)", fontFamily: "var(--body)",
+          fontSize: 13, cursor: "pointer",
         }}>İptal</button>
 
         <button onClick={applyMask} style={{
-          height: 32, padding: "0 16px", borderRadius: 8, border: 0,
-          background: "linear-gradient(180deg, #9088f0 0%, #6d5fe8 100%)",
-          color: "#fff", fontFamily: "var(--body)", fontSize: 12.5, fontWeight: 600, cursor: "pointer",
-          boxShadow: "0 4px 14px -4px rgba(109,95,232,0.7)", marginLeft: 2,
+          height: 44, padding: "0 22px", borderRadius: 10, border: 0,
+          background: "rgba(100,88,200,0.55)",
+          color: "rgba(255,255,255,0.9)", fontFamily: "var(--body)", fontSize: 13, fontWeight: 600,
+          cursor: "pointer", marginLeft: 2,
         }}>Uygula</button>
       </div>
     </div>
@@ -843,38 +909,14 @@ function MaskCanvasModal({ imageUrl, onClose, onConfirm }: {
 
 // ─── ParamMask ────────────────────────────────────────────────────────────────
 
-function ParamMask({ op, maskMode, setMaskMode, imageUrl, maskB64, onOpenCanvas, onClearMask }: {
-  op: Operation; maskMode: MaskMode; setMaskMode: (m: MaskMode) => void;
+function ParamMask({ op, imageUrl, maskB64, onOpenCanvas, onClearMask }: {
+  op: Operation;
   imageUrl: string | null; maskB64: string | null;
   onOpenCanvas: () => void; onClearMask: () => void;
 }) {
-  const modes = [
-    { id: "brush" as MaskMode, label: "Fırça", icon: "✏", desc: "Düzenlenecek alanı boyayın" },
-    { id: "box"   as MaskMode, label: "Kutu",  icon: "▢", desc: "Dikdörtgen seçim yapın"    },
-    { id: "smart" as MaskMode, label: "Akıllı",icon: "◈", desc: "Nesneye tıklayın"          },
-  ];
   return (
     <div>
-      <FieldLabel hint="Zorunlu">Fotoğraf üzerinde mask çiz</FieldLabel>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 5, marginBottom: 10 }}>
-        {modes.map((m) => {
-          const sel = maskMode === m.id;
-          return (
-            <button key={m.id} onClick={() => setMaskMode(m.id)} style={{
-              display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-              padding: "7px 8px", borderRadius: 8,
-              background: sel ? oc(op, 0.12) : "var(--surface)",
-              border: `1px solid ${sel ? oc(op, 0.4) : "var(--border)"}`,
-              color: sel ? oc(op) : "var(--dim)",
-              fontFamily: "inherit", fontSize: 11.5, fontWeight: 500, cursor: "pointer",
-              transition: "all 0.12s",
-            }}>
-              <span style={{ fontSize: 12 }}>{m.icon}</span>
-              <span>{m.label}</span>
-            </button>
-          );
-        })}
-      </div>
+      <FieldLabel hint="Zorunlu">Mask çiz</FieldLabel>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         <button onClick={onOpenCanvas} style={miniBtn}>
           {maskB64 ? "Tuvale aç · Düzenle" : "Tuvale aç"}
@@ -1008,7 +1050,7 @@ function AIEditPanel({
             )}
             {op.params.includes("mask") && (
               <ParamMask
-                op={op} maskMode={maskMode} setMaskMode={setMaskMode}
+                op={op}
                 imageUrl={imageUrl} maskB64={maskB64}
                 onOpenCanvas={onOpenMask} onClearMask={onClearMask}
               />
@@ -1018,15 +1060,24 @@ function AIEditPanel({
                 value={params.strength} onChange={(v) => setParam("strength", v)}
                 format={(v) => v.toFixed(2)} />
             )}
-            {op.params.includes("direction") && (
-              <ParamSeg op={op} label="Yön"
-                options={[{ value: "left", label: "← Sol" }, { value: "right", label: "Sağ →" }, { value: "up", label: "↑ Üst" }, { value: "down", label: "↓ Alt" }]}
-                value={params.direction} onChange={(v) => setParam("direction", v as string)} />
+            {op.params.includes("outpaint_mode") && (
+              <ParamSelect op={op} label="Mod" value={params.outpaint_mode} onChange={(v) => setParam("outpaint_mode", v)}
+                options={["Zoom out 1.5x","Zoom out 2x","Make square","Left outpaint","Right outpaint","Top outpaint","Bottom outpaint"]} />
             )}
-            {op.params.includes("pixels") && (
-              <ParamSlider op={op} label="Genişlet" min={64} max={512} step={64}
-                value={params.pixels} onChange={(v) => setParam("pixels", v)}
-                format={(v) => `${v}px`} />
+            {op.params.includes("steps") && (
+              <ParamSlider op={op} label="Adımlar" min={1} max={50} step={1}
+                value={params.steps} onChange={(v) => setParam("steps", v)}
+                format={(v) => `${v}`} />
+            )}
+            {op.params.includes("guidance") && (
+              <ParamSlider op={op} label="Guidance" min={1} max={10} step={0.5}
+                value={params.guidance} onChange={(v) => setParam("guidance", v)}
+                format={(v) => v.toFixed(1)} />
+            )}
+            {op.params.includes("safety_tolerance") && (
+              <ParamSlider op={op} label="Güvenlik" min={0} max={6} step={1}
+                value={params.safety_tolerance} onChange={(v) => setParam("safety_tolerance", v)}
+                format={(v) => `${v}`} />
             )}
             {op.params.includes("scale") && (
               <ParamSeg op={op} label="Ölçek"
@@ -1365,7 +1416,8 @@ export default function EditPage() {
   // Panel state
   const [selectedId, setSelectedId] = useState<OpId | null>(null);
   const [params, setParamsState] = useState<EditParams>({
-    prompt: "", description: "", strength: 0.85, direction: "right", pixels: 256, scale: 2,
+    prompt: "", description: "", strength: 0.85, steps: 50, guidance: 3, safety_tolerance: 2, scale: 2,
+    outpaint_mode: "Zoom out 2x",
   });
   const setParam = (k: keyof EditParams, v: EditParams[keyof EditParams]) =>
     setParamsState((p) => ({ ...p, [k]: v }));
@@ -1435,8 +1487,10 @@ export default function EditPage() {
         islem: selectedId,
         prompt: op.params.includes("prompt") ? params.prompt || undefined : undefined,
         guc: op.params.includes("strength") ? params.strength : undefined,
-        yon: op.params.includes("direction") ? params.direction : undefined,
-        genisletme_px: op.params.includes("pixels") ? params.pixels : undefined,
+        outpaint_modu: op.params.includes("outpaint_mode") ? params.outpaint_mode : undefined,
+        adimlar: op.params.includes("steps") ? params.steps : undefined,
+        kilavuz: op.params.includes("guidance") ? params.guidance : undefined,
+        guvenlik: op.params.includes("safety_tolerance") ? params.safety_tolerance : undefined,
         olcek: op.params.includes("scale") ? params.scale as 2 | 4 : undefined,
         aciklama: op.params.includes("description") ? params.description || undefined : undefined,
         maske_b64: op.params.includes("mask") ? maskB64 ?? undefined : undefined,
@@ -1498,19 +1552,38 @@ export default function EditPage() {
             />
           )}
 
-          {/* Error bar */}
+          {/* Error toast */}
           {error && (
             <div style={{
-              position: "absolute", bottom: 24, left: "calc(var(--sidebar-w) + 24px)",
-              background: "var(--surface)", border: "1px solid var(--error)",
-              borderRadius: 10, padding: "10px 16px",
-              color: "var(--error)", fontSize: 13, fontFamily: "var(--body)",
-              boxShadow: "0 8px 24px rgba(0,0,0,0.4)", zIndex: 20,
+              position: "absolute", bottom: 28,
+              left: "50%", transform: "translateX(-50%)",
+              display: "flex", alignItems: "center", gap: 12,
+              background: "rgba(22,14,14,0.97)",
+              border: "1px solid rgba(220,60,60,0.35)",
+              borderRadius: 12, padding: "12px 16px",
+              boxShadow: "0 12px 40px rgba(0,0,0,0.6)",
+              zIndex: 20, maxWidth: 420, width: "max-content",
+              animation: "toast-in 0.2s ease-out",
             }}>
-              {error}
+              <style>{`@keyframes toast-in { from { opacity:0; transform:translateX(-50%) translateY(8px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }`}</style>
+              <span style={{
+                width: 28, height: 28, borderRadius: 8, flexShrink: 0,
+                background: "rgba(220,60,60,0.15)",
+                display: "grid", placeItems: "center",
+              }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(240,80,80,0.9)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+              </span>
+              <span style={{ fontSize: 13, color: "rgba(255,200,200,0.9)", fontFamily: "var(--body)", lineHeight: 1.4 }}>
+                {error}
+              </span>
               <button onClick={() => setError(null)} style={{
-                marginLeft: 12, background: "none", border: "none",
-                color: "var(--error)", cursor: "pointer", fontSize: 14, opacity: 0.7,
+                marginLeft: 4, flexShrink: 0, width: 22, height: 22, borderRadius: 6,
+                background: "transparent", border: 0,
+                color: "rgba(255,255,255,0.3)", cursor: "pointer",
+                display: "grid", placeItems: "center", fontSize: 15, lineHeight: 1,
               }}>×</button>
             </div>
           )}
