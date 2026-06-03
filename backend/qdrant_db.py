@@ -4,6 +4,11 @@ import os
 import hashlib
 
 
+def collection_adi(user_id: str) -> str:
+    """user_id'den Qdrant collection adı üretir: 'user_' + UUID (dash'siz)."""
+    return f"user_{user_id.replace('-', '')}"
+
+
 def qdrant_baglanti():
     client = QdrantClient(
         url=os.getenv("QDRANT_URL"),

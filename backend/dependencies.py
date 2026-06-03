@@ -1,33 +1,47 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
 from jwt_handler import jwt_dogrula
-from token_store import getir_tum as credentials_getir_tum
+from user_store import User, user_store_getir
+from token_store import token_store_getir
 
 security = HTTPBearer()
 
 
-def aktif_kullanici(
+async def aktif_kullanici_id(
     auth: HTTPAuthorizationCredentials = Depends(security),
-) -> dict:
-    """Authorization: Bearer <token> header'ından kullanıcıyı doğrular."""
-    payload = jwt_dogrula(auth.credentials)
-    if payload is None:
+) -> str:
+    """JWT validate → sadece user_id string döner. DB query YOK. Yüksek-frekanslı endpoint'ler için."""
+    user_id = jwt_dogrula(auth.credentials)
+    if not user_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Geçersiz veya süresi dolmuş token",
         )
-    return payload
+    return user_id
 
 
-def kullanici_tum_credentials(user: dict = Depends(aktif_kullanici)):
-    """
-    Kullanıcının tüm provider credential'larını döner.
-    Hiçbir provider bağlı değilse 401 döner.
-    """
-    all_creds = credentials_getir_tum(user["email"])
+async def aktif_kullanici(
+    user_id: str = Depends(aktif_kullanici_id),
+) -> User:
+    """user_id'den User objesi DB'den fetch eder."""
+    user = user_store_getir().getir(user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Kullanıcı bulunamadı",
+        )
+    return user
+
+
+async def kullanici_tum_credentials(
+    user_id: str = Depends(aktif_kullanici_id),
+) -> dict:
+    """Provider credentials'ları döner. Hiçbir provider bağlı değilse 401."""
+    all_creds = token_store_getir().getir_tum(user_id)
     if not all_creds:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Hiçbir cloud hesabı bağlı değil, lütfen tekrar giriş yapın.",
         )
-    return {"user": user, "credentials": all_creds}
+    return all_creds

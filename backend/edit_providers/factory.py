@@ -23,7 +23,7 @@ def desteklenen_providerlar() -> list[dict]:
             try:
                 instance = edit_provider_getir(p["id"])
                 islemler = [i.value for i in instance.desteklenen_islemler]
-            except Exception:
+            except (ImportError, EnvironmentError, Exception):
                 islemler = []
         else:
             islemler = []

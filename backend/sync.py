@@ -9,12 +9,14 @@ from providers.factory import provider_getir
 from embedding import foto_vektore_cevir
 from qdrant_db import collection_olustur, fotograf_kaydet, toplu_fotograf_sil, file_id_to_point_id
 from token_store import page_token_kaydet, page_token_getir
+from album_store import fotograf_cikar_global as album_fotograf_cikar_global
 
 
-def index_all(qdrant_client, col_name, email, all_credentials: dict, limit=500, folder_id=None):
+def index_all(qdrant_client, col_name, user_id, all_credentials: dict, limit=500, folder_id=None):
     """
     Tam indexleme — tüm bağlı provider'ları sıfırdan indexler.
     all_credentials: {source: credentials} dict — token_store.getir_tum() çıktısı.
+    Collection user yaratılırken oluşturulmuştu (eager creation); burada zaten var varsayılır.
     """
     collection_olustur(qdrant_client, col_name, 512)
 
@@ -49,6 +51,8 @@ def index_all(qdrant_client, col_name, email, all_credentials: dict, limit=500, 
             ]
             if hayalet_idler:
                 toplu_fotograf_sil(qdrant_client, col_name, hayalet_idler)
+                for fid in hayalet_idler:
+                    album_fotograf_cikar_global(source, fid)
                 print(f"  🗑️ [{source}] {len(hayalet_idler)} hayalet kayıt temizlendi: {hayalet_idler}")
         except Exception as e:
             print(f"  ⚠️ [{source}] hayalet temizlik hatası: {e}")
@@ -70,7 +74,7 @@ def index_all(qdrant_client, col_name, email, all_credentials: dict, limit=500, 
         try:
             token = provider.baslangic_token_al()
             _, _, gelismis_token = provider.degisiklikleri_getir(token)
-            page_token_kaydet(email, source, gelismis_token)
+            page_token_kaydet(user_id, source, gelismis_token)
         except Exception as e:
             print(f"  ⚠️ [{source}] başlangıç token alınamadı: {e}")
 
@@ -81,7 +85,7 @@ def index_all(qdrant_client, col_name, email, all_credentials: dict, limit=500, 
     }
 
 
-def delta_sync(qdrant_client, col_name, email, all_credentials: dict):
+def delta_sync(qdrant_client, col_name, user_id, all_credentials: dict):
     """
     Delta sync — her provider için sadece son sync'ten bu yana değişenleri işler.
     Hiçbir provider için token yoksa None döner (henüz index yapılmamış demek).
@@ -92,7 +96,7 @@ def delta_sync(qdrant_client, col_name, email, all_credentials: dict):
     herhangi_token_var = False
 
     for source, creds in all_credentials.items():
-        saved_token = page_token_getir(email, source)
+        saved_token = page_token_getir(user_id, source)
         if not saved_token:  # None veya boş string
             print(f"  ⚠️ [{source}] için kayıtlı token yok, atlanıyor.")
             continue
@@ -112,6 +116,8 @@ def delta_sync(qdrant_client, col_name, email, all_credentials: dict):
         if silinenler:
             try:
                 toplu_fotograf_sil(qdrant_client, col_name, silinenler)
+                for fid in silinenler:
+                    album_fotograf_cikar_global(source, fid)
                 deleted += len(silinenler)
                 print(f"  🗑️ [{source}] delta: {len(silinenler)} fotoğraf silindi")
             except Exception as e:
@@ -149,12 +155,14 @@ def delta_sync(qdrant_client, col_name, email, all_credentials: dict):
             ]
             if kayip_idler:
                 toplu_fotograf_sil(qdrant_client, col_name, kayip_idler)
+                for fid in kayip_idler:
+                    album_fotograf_cikar_global(source, fid)
                 deleted += len(kayip_idler)
                 print(f"  🗑️ [{source}] reconciliation: {len(kayip_idler)} kayıp dosya temizlendi")
         except Exception as e:
             print(f"  ⚠️ [{source}] reconciliation hatası: {e}")
 
-        page_token_kaydet(email, source, yeni_token)
+        page_token_kaydet(user_id, source, yeni_token)
 
     if not herhangi_token_var:
         return None

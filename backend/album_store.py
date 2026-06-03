@@ -1,14 +1,17 @@
 """
-Cross-cloud sanal albüm depolama — SQLite.
+Cross-cloud sanal albüm depolama — SQLite (app.db).
 Fotoğraflar yerinde kalır, sadece referanslar (source + file_id) saklanır.
+owner alanı artık user_id (UUID v4) kullanır.
 """
 
 import sqlite3
-import uuid
-import os
-from datetime import datetime
+from datetime import datetime, timezone
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "albums.db")
+from user_store import DB_PATH
+
+
+def _simdi_utc() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _conn():
@@ -19,35 +22,14 @@ def _conn():
 
 
 def init_db():
-    with _conn() as c:
-        c.execute("""
-            CREATE TABLE IF NOT EXISTS albums (
-                album_id   TEXT PRIMARY KEY,
-                owner      TEXT NOT NULL,
-                name       TEXT NOT NULL,
-                created_at TEXT NOT NULL
-            )
-        """)
-        c.execute("""
-            CREATE TABLE IF NOT EXISTS album_photos (
-                album_id    TEXT NOT NULL,
-                source      TEXT NOT NULL,
-                file_id     TEXT NOT NULL,
-                filename    TEXT DEFAULT '',
-                drive_url   TEXT DEFAULT '',
-                folder_path TEXT DEFAULT '',
-                file_size   INTEGER DEFAULT 0,
-                added_at    TEXT NOT NULL,
-                PRIMARY KEY (album_id, source, file_id),
-                FOREIGN KEY (album_id) REFERENCES albums(album_id) ON DELETE CASCADE
-            )
-        """)
-        c.commit()
+    """Tablo şeması user_store.init_db() tarafından oluşturulur. No-op."""
+    pass
 
 
 def album_olustur(owner: str, name: str) -> dict:
-    album_id   = str(uuid.uuid4())
-    created_at = datetime.utcnow().isoformat()
+    import uuid
+    album_id = str(uuid.uuid4())
+    created_at = _simdi_utc()
     with _conn() as c:
         c.execute(
             "INSERT INTO albums (album_id, owner, name, created_at) VALUES (?, ?, ?, ?)",
@@ -122,8 +104,7 @@ def fotograf_ekle(
             INSERT OR REPLACE INTO album_photos
             (album_id, source, file_id, filename, drive_url, folder_path, file_size, added_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (album_id, source, file_id, filename, drive_url, folder_path, file_size,
-              datetime.utcnow().isoformat()))
+        """, (album_id, source, file_id, filename, drive_url, folder_path, file_size, _simdi_utc()))
         c.commit()
     return True
 
@@ -140,3 +121,14 @@ def fotograf_cikar(album_id: str, owner: str, source: str, file_id: str) -> bool
         )
         c.commit()
     return True
+
+
+def fotograf_cikar_global(source: str, file_id: str) -> int:
+    """Tüm albümlerden (source, file_id) kombinasyonunu siler. Silinen referans sayısını döner."""
+    with _conn() as c:
+        cur = c.execute(
+            "DELETE FROM album_photos WHERE source = ? AND file_id = ?",
+            (source, file_id),
+        )
+        c.commit()
+    return cur.rowcount

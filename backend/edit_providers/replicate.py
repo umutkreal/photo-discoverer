@@ -1,17 +1,24 @@
+from __future__ import annotations
+
 import os
 from io import BytesIO
 from typing import Optional
+
+try:
+    import replicate
+    import httpx
+    from PIL import Image
+    _DEPS_OK = True
+except ImportError:
+    _DEPS_OK = False
+
+from .base import BaseEditProvider, EditIslemi, EditSonucu, EditHatasi
 
 
 class NamedBytesIO(BytesIO):
     """BytesIO subclass with a .name attribute so the Replicate SDK can detect MIME type."""
     name: str
 
-import httpx
-import replicate
-from PIL import Image
-
-from .base import BaseEditProvider, EditIslemi, EditSonucu, EditHatasi
 
 _MODELLER = {
     "flux_fill_pro":      "black-forest-labs/flux-fill-pro",
@@ -26,6 +33,11 @@ _MODELLER = {
 class ReplicateEditProvider(BaseEditProvider):
 
     def __init__(self, api_token: Optional[str] = None):
+        if not _DEPS_OK:
+            raise ImportError(
+                "AI edit için gerekli paket eksik. "
+                "`pip install replicate pillow httpx` ile yükleyin."
+            )
         token = api_token or os.getenv("REPLICATE_API_TOKEN")
         if not token:
             raise EnvironmentError("REPLICATE_API_TOKEN is not set.")
@@ -116,8 +128,8 @@ class ReplicateEditProvider(BaseEditProvider):
         model = _MODELLER["flux_kontext_pro"]
         try:
             output = replicate.run(model, input={
-                "input_image": self._pil_to_file(gorsel, "RGB"),
-                "prompt":prompt,
+                "input_image":    self._pil_to_file(gorsel, "RGB"),
+                "prompt":         prompt,
                 "output_format":  "jpg",
                 "output_quality": 92,
             })
@@ -129,7 +141,7 @@ class ReplicateEditProvider(BaseEditProvider):
         model = _MODELLER["flux_kontext_max"]
         try:
             output = replicate.run(model, input={
-                "input_image":          self._pil_to_file(gorsel, "RGB"),
+                "input_image":    self._pil_to_file(gorsel, "RGB"),
                 "prompt":         prompt,
                 "output_format":  "jpg",
                 "output_quality": 92,

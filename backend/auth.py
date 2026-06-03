@@ -5,42 +5,60 @@ from dotenv import load_dotenv
 import os
 import secrets
 import httpx
+from datetime import datetime, timezone
+
+from oauth_state_store import OAuthStateStore
+
 load_dotenv()
 os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
 
 SCOPES = [
     "openid",
-    "https://www.googleapis.com/auth/drive",          # okuma + silme (readonly yetersiz)
+    "https://www.googleapis.com/auth/drive",
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/userinfo.profile",
 ]
 
 REDIRECT_URI = "http://localhost:8000/auth/callback"
 
-_flow = None
+
+def _simdi_utc() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def oauth_flow_init():
-    global _flow
-    _flow = Flow.from_client_secrets_file(
+def oauth_flow_init(state_store: OAuthStateStore) -> tuple[str, str]:
+    """Auth URL ve state üretir. State store'a payload kaydeder.
+    Returns: (auth_url, state)
+    """
+    flow = Flow.from_client_secrets_file(
         "credentials.json",
         scopes=SCOPES,
         redirect_uri=REDIRECT_URI,
     )
-    auth_url, _ = _flow.authorization_url(
+    auth_url, state = flow.authorization_url(
         prompt="consent",
         access_type="offline",
     )
-    return auth_url
+    payload: dict = {"provider": "google", "created_at": _simdi_utc()}
+    # Yeni google-auth-oauthlib sürümleri PKCE otomatik kullanır;
+    # code_verifier'ı token exchange için sakla.
+    if getattr(flow, "code_verifier", None):
+        payload["code_verifier"] = flow.code_verifier
+    state_store.kaydet(state, payload)
+    return auth_url, state
 
 
-def oauth_flow_fetch_token(authorization_response_url: str):
-    """Tam callback URL'sini kullanarak token al."""
-    global _flow
-    if _flow is None:
-        raise RuntimeError("OAuth flow başlatılmamış. Önce /auth/login çağır.")
-    _flow.fetch_token(authorization_response=authorization_response_url)
-    return _flow.credentials
+def oauth_flow_fetch_token(state: str, code: str, code_verifier: str | None = None) -> Credentials:
+    """Token exchange yapar. CSRF doğrulaması caller tarafından yapılmış olmalı."""
+    flow = Flow.from_client_secrets_file(
+        "credentials.json",
+        scopes=SCOPES,
+        redirect_uri=REDIRECT_URI,
+    )
+    if code_verifier:
+        flow.code_verifier = code_verifier
+    flow.fetch_token(code=code)
+    return flow.credentials
 
 
 def get_user_info(credentials):
@@ -59,14 +77,10 @@ PCLOUD_CLIENT_ID     = os.getenv("PCLOUD_CLIENT_ID")
 PCLOUD_CLIENT_SECRET = os.getenv("PCLOUD_CLIENT_SECRET")
 PCLOUD_REDIRECT_URI  = "http://localhost:8000/auth/pcloud/callback"
 PCLOUD_AUTH_URL      = "https://my.pcloud.com/oauth2/authorize"
-PCLOUD_TOKEN_URL     = "https://api.pcloud.com/oauth2_token"
-
-_pcloud_states: dict = {}   # state → email
 
 
-def pcloud_auth_url_olustur(email: str) -> str:
-    state = secrets.token_urlsafe(16)
-    _pcloud_states[state] = email
+def pcloud_auth_url_olustur(state: str) -> str:
+    """State'i parametre alır, URL üretir. State yönetimi caller'ın sorumluluğunda."""
     params = (
         f"?client_id={PCLOUD_CLIENT_ID}"
         f"&redirect_uri={PCLOUD_REDIRECT_URI}"
@@ -76,14 +90,10 @@ def pcloud_auth_url_olustur(email: str) -> str:
     return PCLOUD_AUTH_URL + params
 
 
-def pcloud_token_al(code: str, state: str) -> tuple[dict, str]:
-    """Döner: ({"access_token": "..."}, email)"""
-    email = _pcloud_states.pop(state, None)
-    if not email:
-        raise RuntimeError("Geçersiz veya süresi dolmuş state parametresi")
-
+def pcloud_token_exchange(code: str) -> dict:
+    """Yalnızca token exchange yapar. State doğrulaması caller tarafından yapılmış olmalı."""
     resp = httpx.post(
-        PCLOUD_TOKEN_URL,
+        "https://api.pcloud.com/oauth2_token",
         data={
             "client_id":     PCLOUD_CLIENT_ID,
             "client_secret": PCLOUD_CLIENT_SECRET,
@@ -98,7 +108,7 @@ def pcloud_token_al(code: str, state: str) -> tuple[dict, str]:
     if data.get("result", 0) != 0:
         raise RuntimeError(f"pCloud token hatası: {data.get('error', 'bilinmeyen')}")
 
-    return {"access_token": data["access_token"]}, email
+    return {"access_token": data["access_token"]}
 
 
 # ─── OneDrive OAuth (MSAL) ────────────────────────────────────
@@ -113,12 +123,9 @@ ONEDRIVE_SCOPES        = [
     "offline_access",
 ]
 
-_onedrive_states: dict = {}   # state → email
 
-
-def onedrive_auth_url_olustur(email: str) -> str:
-    state = secrets.token_urlsafe(16)
-    _onedrive_states[state] = email
+def onedrive_auth_url_olustur(state: str) -> str:
+    """State'i parametre alır, URL üretir. State yönetimi caller'ın sorumluluğunda."""
     scope = "%20".join(ONEDRIVE_SCOPES)
     return (
         f"https://login.microsoftonline.com/{ONEDRIVE_TENANT_ID}/oauth2/v2.0/authorize"
@@ -131,12 +138,8 @@ def onedrive_auth_url_olustur(email: str) -> str:
     )
 
 
-def onedrive_token_al(code: str, state: str) -> tuple[dict, str]:
-    """Döner: ({"access_token": "...", "refresh_token": "..."}, email)"""
-    email = _onedrive_states.pop(state, None)
-    if not email:
-        raise RuntimeError("Geçersiz veya süresi dolmuş state parametresi")
-
+def onedrive_token_exchange(code: str) -> dict:
+    """Yalnızca token exchange yapar. State doğrulaması caller tarafından yapılmış olmalı."""
     resp = httpx.post(
         f"https://login.microsoftonline.com/{ONEDRIVE_TENANT_ID}/oauth2/v2.0/token",
         data={
@@ -158,4 +161,4 @@ def onedrive_token_al(code: str, state: str) -> tuple[dict, str]:
     return {
         "access_token":  data["access_token"],
         "refresh_token": data.get("refresh_token", ""),
-    }, email
+    }
