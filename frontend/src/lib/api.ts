@@ -253,9 +253,9 @@ export const editApi = {
 };
 
 // ─── Source config (shared UI helpers) ───
-export const SOURCE_CONFIG: Record<SourceKey, { label: string; color: string; bg: string }> = {
-  gdrive:   { label: "Google Drive", color: "#4285F4", bg: "rgba(66,133,244,0.15)" },
-  dropbox:  { label: "Dropbox",      color: "#0061FF", bg: "rgba(0,97,255,0.15)"  },
-  pcloud:   { label: "pCloud",       color: "#20BFFF", bg: "rgba(32,191,255,0.15)" },
-  onedrive: { label: "OneDrive",     color: "#0078D4", bg: "rgba(0,120,212,0.15)" },
+export const SOURCE_CONFIG: Record<SourceKey, { label: string; color: string; bg: string; srcBg: string; light: boolean }> = {
+  gdrive:   { label: "Google Drive", color: "#4285F4", bg: "rgba(66,133,244,0.15)",  srcBg: "#F5F5DC", light: true  },
+  dropbox:  { label: "Dropbox",      color: "#0049C2", bg: "rgba(0,73,194,0.15)",    srcBg: "#0049C2", light: false },
+  pcloud:   { label: "pCloud",       color: "#20BFFF", bg: "rgba(32,191,255,0.15)",  srcBg: "#20BFFF", light: true  },
+  onedrive: { label: "OneDrive",     color: "#0078D4", bg: "rgba(0,120,212,0.15)",   srcBg: "#3A3A3A", light: false },
 };

@@ -49,7 +49,7 @@ export default function Navbar() {
             width: 32,
             height: 32,
             borderRadius: 9,
-            background: "linear-gradient(135deg, var(--accent), #a78bfa)",
+            background: "linear-gradient(135deg, var(--accent), #525252)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",

@@ -52,8 +52,8 @@ function GDriveIcon({ size = 22 }: { size?: number }) {
 function DropboxIcon({ size = 22 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <path d="M12 6L6 9.5L12 13L6 16.5L12 20L18 16.5L12 13L18 9.5L12 6Z" fill="#0061FF"/>
-      <path d="M6 9.5L12 6L18 9.5L12 13L6 9.5Z" fill="#0061FF" opacity="0.6"/>
+      <path d="M12 6L6 9.5L12 13L6 16.5L12 20L18 16.5L12 13L18 9.5L12 6Z" fill="#0049C2"/>
+      <path d="M6 9.5L12 6L18 9.5L12 13L6 9.5Z" fill="#0049C2" opacity="0.6"/>
     </svg>
   );
 }
@@ -108,25 +108,47 @@ function ProviderCard({ source, connected, label, disabled, onConnect, onRevoke,
   const scope = SCOPE_INFO[source];
   const isGdrive = source === "gdrive";
 
+  // Full source-color background — text adapts for contrast
+  const cardBg = cfg.srcBg;
+  const isLight = cfg.light;
+  const titleColor = isLight ? "#15212b" : "#ffffff";
+  const mutedColor = isLight ? "rgba(0,0,0,0.55)" : "rgba(255,255,255,0.65)";
+  const scopePillBg = isLight ? "rgba(0,0,0,0.07)" : "rgba(255,255,255,0.12)";
+  const scopePillColor = isLight ? "#15212b" : "rgba(255,255,255,0.9)";
+  const borderColor = isLight ? "rgba(0,0,0,0.1)" : "rgba(255,255,255,0.12)";
+  const statusBg = connected
+    ? (isLight ? "rgba(0,0,0,0.08)" : "rgba(132,201,164,0.2)")
+    : (isLight ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.1)");
+  const statusColor = connected
+    ? (isLight ? "#2a7a55" : "var(--success)")
+    : mutedColor;
+  const statusBorder = connected
+    ? (isLight ? "rgba(42,122,85,0.3)" : "rgba(132,201,164,0.35)")
+    : borderColor;
+  const revokeBg = "rgba(0,0,0,0.85)";
+  const revokeColor = isLight ? "#b91c1c" : "var(--error)";
+  const revokeBorder = isLight ? "rgba(185,28,28,0.45)" : "rgba(213,115,115,0.45)";
+  const connectBg = isLight ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.2)";
+  const connectColor = isLight ? "#15212b" : "#ffffff";
+
   return (
     <div style={{
-      background: "var(--surface)",
-      border: `1px solid ${disabled ? "var(--border)" : connected ? cfg.color + "44" : "var(--border)"}`,
+      background: cardBg,
+      border: `1px solid ${borderColor}`,
       borderRadius: 16,
       padding: "22px 24px",
       display: "flex",
       alignItems: "flex-start",
       gap: 16,
       transition: "border-color 0.2s",
-      opacity: disabled ? 0.55 : 1,
+      opacity: disabled ? 0.6 : 1,
     }}>
-      {/* Icon */}
+      {/* Icon tile */}
       <div style={{
         width: 48, height: 48, borderRadius: 12, flexShrink: 0,
-        background: (disabled || !connected) ? "var(--surface-2)" : cfg.bg,
-        border: `1px solid ${connected && !disabled ? cfg.color + "33" : "var(--border)"}`,
+        background: isLight ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.15)",
+        border: `1px solid ${borderColor}`,
         display: "flex", alignItems: "center", justifyContent: "center",
-        transition: "all 0.2s",
       }}>
         <Icon size={22} />
       </div>
@@ -136,47 +158,26 @@ function ProviderCard({ source, connected, label, disabled, onConnect, onRevoke,
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
           <h3 style={{
             fontFamily: "var(--font-display)", fontWeight: 700,
-            fontSize: "1.05rem", color: "var(--text)", margin: 0,
+            fontSize: "1.05rem", color: titleColor, margin: 0,
           }}>
             {label}
           </h3>
           <span style={{
             padding: "2px 8px", borderRadius: 5, fontSize: "0.72rem", fontWeight: 600,
             fontFamily: "var(--font-body)",
-            background: disabled
-              ? "rgba(136,136,170,0.1)"
-              : connected ? "rgba(74,222,128,0.12)" : "var(--surface-2)",
-            color: disabled
-              ? "var(--text-muted)"
-              : connected ? "var(--success)" : "var(--text-muted)",
-            border: `1px solid ${disabled ? "var(--border)" : connected ? "rgba(74,222,128,0.3)" : "var(--border)"}`,
+            background: statusBg, color: statusColor, border: `1px solid ${statusBorder}`,
           }}>
             {disabled ? "Devre Dışı" : connected ? "Bağlı" : "Bağlı Değil"}
           </span>
         </div>
 
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
-          <span style={{
-            padding: "2px 8px", borderRadius: 5, fontSize: "0.72rem",
-            fontFamily: "monospace", background: "var(--surface-2)", color: "var(--text-muted)",
-          }}>
-            Mevcut: {scope.current}
-          </span>
-          <span style={{
-            padding: "2px 8px", borderRadius: 5, fontSize: "0.72rem",
-            fontFamily: "monospace", background: "rgba(124,109,250,0.08)", color: "var(--accent)",
-          }}>
-            Silme için: {scope.needed}
-          </span>
-        </div>
 
         {/* Action buttons */}
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {disabled ? (
             <span style={{
               padding: "8px 14px", borderRadius: 8, fontSize: "0.82rem",
-              fontFamily: "var(--font-body)", color: "var(--text-muted)",
-              fontStyle: "italic",
+              fontFamily: "var(--font-body)", color: mutedColor, fontStyle: "italic",
             }}>
               Geçici olarak devre dışı
             </span>
@@ -186,9 +187,8 @@ function ProviderCard({ source, connected, label, disabled, onConnect, onRevoke,
               disabled={revoking}
               style={{
                 padding: "8px 16px", borderRadius: 8,
-                background: "transparent",
-                border: "1px solid rgba(248,113,113,0.4)",
-                color: revoking ? "var(--text-muted)" : "var(--error)",
+                background: revokeBg, border: `1px solid ${revokeBorder}`,
+                color: revoking ? mutedColor : revokeColor,
                 fontFamily: "var(--font-body)", fontSize: "0.85rem",
                 cursor: revoking ? "not-allowed" : "pointer", transition: "all 0.15s",
                 display: "flex", alignItems: "center", gap: 6,
@@ -197,7 +197,7 @@ function ProviderCard({ source, connected, label, disabled, onConnect, onRevoke,
               {revoking && (
                 <span style={{
                   width: 12, height: 12,
-                  border: "2px solid var(--error)", borderTop: "2px solid transparent",
+                  border: `2px solid ${revokeColor}`, borderTop: "2px solid transparent",
                   borderRadius: "50%", animation: "spin-slow 0.7s linear infinite",
                 }} />
               )}
@@ -208,8 +208,9 @@ function ProviderCard({ source, connected, label, disabled, onConnect, onRevoke,
               onClick={() => onConnect(source)}
               style={{
                 padding: "8px 16px", borderRadius: 8,
-                background: cfg.color, color: "white",
-                border: "none", fontFamily: "var(--font-body)", fontSize: "0.85rem",
+                background: connectBg, color: connectColor,
+                border: `1px solid ${borderColor}`,
+                fontFamily: "var(--font-body)", fontSize: "0.85rem",
                 cursor: "pointer", transition: "opacity 0.15s",
               }}
             >
@@ -220,8 +221,9 @@ function ProviderCard({ source, connected, label, disabled, onConnect, onRevoke,
               onClick={() => onConnect(source)}
               style={{
                 padding: "8px 16px", borderRadius: 8,
-                background: cfg.color, color: "white",
-                border: "none", fontFamily: "var(--font-body)", fontSize: "0.85rem",
+                background: connectBg, color: connectColor,
+                border: `1px solid ${borderColor}`,
+                fontFamily: "var(--font-body)", fontSize: "0.85rem",
                 cursor: "pointer", transition: "opacity 0.15s",
               }}
             >
@@ -377,8 +379,8 @@ export default function IntegrationsPage() {
       {toast && (
         <div style={{
           position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)",
-          zIndex: 200, background: "rgba(26,26,36,0.97)",
-          border: `1px solid ${toast.type === "success" ? "rgba(74,222,128,0.4)" : "rgba(248,113,113,0.4)"}`,
+          zIndex: 200, background: "rgba(21,21,21,0.97)",
+          border: `1px solid ${toast.type === "success" ? "rgba(132,201,164,0.4)" : "rgba(213,115,115,0.4)"}`,
           borderRadius: 12, padding: "14px 20px",
           display: "flex", alignItems: "center", gap: 12,
           boxShadow: "0 8px 32px rgba(0,0,0,0.5)", animation: "fadeIn 0.3s ease-out",

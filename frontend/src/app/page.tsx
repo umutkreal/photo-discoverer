@@ -63,8 +63,8 @@ export default function HomePage() {
         {error && (
           <div
             style={{
-              background: "rgba(248,113,113,0.1)",
-              border: "1px solid rgba(248,113,113,0.3)",
+              background: "rgba(213,115,115,0.1)",
+              border: "1px solid rgba(213,115,115,0.3)",
               borderRadius: 12,
               padding: "12px 20px",
               color: "var(--error)",

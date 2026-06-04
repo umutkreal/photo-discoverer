@@ -1,35 +1,79 @@
-@import url('https://fonts.cdnfonts.com/css/eightgon');
+@import url('https://fonts.googleapis.com/css2?family=Epilogue:wght@300;400;500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
+  /* ─── Layout ─── */
   --sidebar-w: 240px;
-  --bg: #0a0a0f;
-  --surface: #111118;
-  --surface-2: #1a1a24;
-  --border: #2a2a3a;
-  --accent: #7c6dfa;
-  --accent-glow: rgba(124, 109, 250, 0.25);
-  --text: #f0f0f8;
-  --text-muted: #8888aa;
-  --success: #4ade80;
-  --error: #f87171;
-  --warning: #fbbf24;
-  --font-display: var(--font-syne);
-  --font-body: var(--font-dm);
-  --body: var(--font-dm), system-ui, sans-serif;
-  --mono: var(--font-mono), ui-monospace, monospace;
+  --sidebar-collapsed-w: 64px;
+  --navbar-h: 64px;
 
-  --bg-2:      #0d0d12;
-  --surface-3: #1a1a24;
-  --border-2:  #3a3a4a;
-  --dim:       #8888aa;
-  --dimmer:    #5a5a6e;
-  --violet:    #7c6dfa;
-  --violet-2:  #a78bfa;
-  --green:     #4ade80;
+  /* ─── Surfaces (jet-black canvas, lighter charcoal cards) ─── */
+  --bg:        #050505;
+  --bg-2:      #0b0b0b;
+  --surface:   #151515;
+  --surface-2: #1f1f1f;
+  --surface-3: #1f1f1f;
+
+  /* ─── Borders ─── */
+  --border:      #2b2b2b;
+  --border-2:    #3a3a3a;
+  --border-soft: rgba(255,255,255,0.06);
+
+  /* ─── Text ─── */
+  --text:       #f0f0f0;
+  --text-muted: #909090;
+  --dim:        #909090;
+  --dimmer:     #5a5a5a;
+
+  /* ─── Brand accent (neutral dark — monochrome, no purple) ─── */
+  --accent:      #383838;
+  --accent-2:    #525252;
+  --accent-soft: rgba(255,255,255,0.15);
+  --accent-tint: rgba(255,255,255,0.08);
+  --accent-grad: linear-gradient(135deg, #383838, #525252);
+  --accent-glow: rgba(56,56,56,0.25);
+
+  /* ─── Legacy aliases ─── */
+  --violet:   #383838;
+  --violet-2: #525252;
+
+  /* ─── Semantic status (matte/pastel) ─── */
+  --success: #84c9a4;
+  --green:   #84c9a4;
+  --emerald: #4aa988;
+  --error:   #d57373;
+  --warning: #e3b75e;
+
+  /* ─── Cloud-source brand colors ─── */
+  --src-gdrive:   #4285F4;
+  --src-dropbox:  #0049C2;
+  --src-pcloud:   #20BFFF;
+  --src-onedrive: #0078D4;
+
+  /* ─── Type families (Epilogue — single font system) ─── */
+  --font-display: var(--font-epilogue), 'Epilogue', sans-serif;
+  --font-body:    var(--font-epilogue), 'Epilogue', system-ui, sans-serif;
+  --font-mono:    var(--font-epilogue), 'Epilogue', system-ui, sans-serif;
+  --body: var(--font-body);
+  --mono: var(--font-mono);
+
+  /* ─── Radii ─── */
+  --radius-xs:   5px;
+  --radius-sm:   8px;
+  --radius-md:   10px;
+  --radius-lg:   12px;
+  --radius-xl:   16px;
+  --radius-2xl:  20px;
+  --radius-pill: 100px;
+
+  /* ─── Shadows ─── */
+  --shadow-menu:  0 8px 32px rgba(0,0,0,0.5), 0 2px 8px rgba(0,0,0,0.3);
+  --shadow-card:  0 8px 24px rgba(0,0,0,0.4);
+  --shadow-toast: 0 8px 32px rgba(0,0,0,0.5);
+  --shadow-btn:   0 4px 20px rgba(0,0,0,0.25);
 }
 
 html, body {
@@ -55,7 +99,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 ::selection {
-  background: var(--accent-glow);
+  background: var(--accent-soft);
   color: var(--text);
 }
 
@@ -81,11 +125,6 @@ body::before {
   to { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 20px var(--accent-glow); }
-  50% { box-shadow: 0 0 40px var(--accent-glow), 0 0 80px var(--accent-glow); }
-}
-
 @keyframes spin-slow {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
@@ -99,6 +138,3 @@ body::before {
 .animate-fade-in-delay-2 { animation: fadeIn 0.5s ease-out 0.2s forwards; opacity: 0; }
 .animate-fade-in-delay-3 { animation: fadeIn 0.5s ease-out 0.3s forwards; opacity: 0; }
 
-.glow-pulse {
-  animation: pulse-glow 3s ease-in-out infinite;
-}

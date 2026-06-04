@@ -17,7 +17,7 @@ function fmtSize(bytes: number): string {
 }
 
 function scoreBadge(score: number): { label: string; color: string; bg: string } {
-  if (score >= 0.99) return { label: "Tam kopya", color: "#f87171", bg: "rgba(248,113,113,0.15)" };
+  if (score >= 0.99) return { label: "Tam kopya", color: "#f87171", bg: "rgba(213,115,115,0.15)" };
   if (score >= 0.95) return { label: "Benzer kare", color: "#fbbf24", bg: "rgba(251,191,36,0.15)" };
   return { label: "Benzer", color: "#8888aa", bg: "rgba(136,136,170,0.1)" };
 }
@@ -47,13 +47,13 @@ function ConfirmModal({
       padding: 24, animation: "fadeIn 0.2s ease-out",
     }}>
       <div onClick={(e) => e.stopPropagation()} style={{
-        background: "var(--surface)", border: "1px solid rgba(248,113,113,0.3)",
+        background: "var(--surface)", border: "1px solid rgba(213,115,115,0.3)",
         borderRadius: 20, maxWidth: 460, width: "100%", padding: "28px",
       }}>
         <div style={{ textAlign: "center", marginBottom: 20 }}>
           <div style={{
             width: 56, height: 56, borderRadius: "50%", margin: "0 auto 16px",
-            background: "rgba(248,113,113,0.1)", border: "1px solid rgba(248,113,113,0.3)",
+            background: "rgba(213,115,115,0.1)", border: "1px solid rgba(213,115,115,0.3)",
             display: "flex", alignItems: "center", justifyContent: "center",
           }}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
@@ -159,7 +159,7 @@ function DuplicateGroup({
 
   return (
     <div style={{
-      background: "var(--surface)", border: `1px solid ${expanded ? "rgba(124,109,250,0.3)" : "var(--border)"}`,
+      background: "var(--surface)", border: `1px solid ${expanded ? "var(--border-2)" : "var(--border)"}`,
       borderRadius: 16, overflow: "hidden",
       animation: `fadeIn 0.4s ease-out ${groupIndex * 0.04}s both`,
       transition: "border-color 0.2s",
@@ -199,7 +199,7 @@ function DuplicateGroup({
               {group.length} dosya
             </span>
             {savings > 0 && (
-              <span style={{ padding: "2px 8px", borderRadius: 5, fontSize: "0.7rem", fontFamily: "monospace", background: "rgba(74,222,128,0.1)", color: "var(--success)" }}>
+              <span style={{ padding: "2px 8px", borderRadius: 5, fontSize: "0.7rem", fontFamily: "var(--font-mono)", background: "rgba(132,201,164,0.1)", color: "var(--success)" }}>
                 ~{fmtSize(savings)} boşaltılabilir
               </span>
             )}
@@ -223,7 +223,7 @@ function DuplicateGroup({
           </p>
 
           {error && (
-            <p style={{ padding: "8px 12px", borderRadius: 8, background: "rgba(248,113,113,0.1)", color: "var(--error)", fontFamily: "var(--font-body)", fontSize: "0.82rem", marginBottom: 12 }}>
+            <p style={{ padding: "8px 12px", borderRadius: 8, background: "rgba(213,115,115,0.1)", color: "var(--error)", fontFamily: "var(--font-body)", fontSize: "0.82rem", marginBottom: 12 }}>
               {error}
             </p>
           )}
@@ -267,7 +267,7 @@ function DuplicateGroup({
                         position: "absolute", top: 6, left: 6,
                         padding: "2px 7px", borderRadius: 5, fontSize: "0.68rem",
                         fontFamily: "var(--font-body)", fontWeight: 700,
-                        background: isKeep ? "rgba(74,222,128,0.9)" : "rgba(248,113,113,0.85)",
+                        background: isKeep ? "rgba(132,201,164,0.9)" : "rgba(213,115,115,0.85)",
                         color: "white",
                       }}>
                         {isKeep ? "✓ Sakla" : "Sil"}
@@ -306,8 +306,8 @@ function DuplicateGroup({
               onClick={() => setShowConfirm(true)}
               style={{
                 padding: "10px 20px", borderRadius: 10,
-                background: "rgba(248,113,113,0.12)",
-                border: "1px solid rgba(248,113,113,0.35)",
+                background: "rgba(213,115,115,0.12)",
+                border: "1px solid rgba(213,115,115,0.35)",
                 color: "var(--error)", fontFamily: "var(--font-display)",
                 fontWeight: 600, fontSize: "0.88rem", cursor: "pointer",
                 display: "flex", alignItems: "center", gap: 8,
@@ -455,7 +455,7 @@ export default function DuplicatesPage() {
         </div>
 
         {/* Error */}
-        {error && <div style={{ padding: "14px 18px", borderRadius: 12, marginBottom: 20, background: "rgba(248,113,113,0.1)", border: "1px solid rgba(248,113,113,0.25)", color: "var(--error)", fontFamily: "var(--font-body)" }}>{error}</div>}
+        {error && <div style={{ padding: "14px 18px", borderRadius: 12, marginBottom: 20, background: "rgba(213,115,115,0.1)", border: "1px solid rgba(213,115,115,0.25)", color: "var(--error)", fontFamily: "var(--font-body)" }}>{error}</div>}
 
         {/* Scanning spinner */}
         {scanning && (
@@ -468,7 +468,7 @@ export default function DuplicatesPage() {
         {/* No results */}
         {!scanning && groups !== null && groups.length === 0 && (
           <div style={{ textAlign: "center", padding: "60px 0" }}>
-            <div style={{ width: 72, height: 72, borderRadius: "50%", margin: "0 auto 20px", background: "rgba(74,222,128,0.1)", border: "1px solid rgba(74,222,128,0.3)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ width: 72, height: 72, borderRadius: "50%", margin: "0 auto 20px", background: "rgba(132,201,164,0.1)", border: "1px solid rgba(132,201,164,0.3)", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <svg width="30" height="30" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17L4 12" stroke="var(--success)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
             </div>
             <p style={{ fontFamily: "var(--font-display)", fontSize: "1.2rem", color: "var(--text)", marginBottom: 8 }}>Yinelenen bulunamadı</p>

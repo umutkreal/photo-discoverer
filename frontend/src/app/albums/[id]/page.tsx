@@ -76,13 +76,13 @@ function Lightbox({ photos, initialIndex, onClose, onRemove, onDeleteFromCloud }
           animation: "fadeIn 0.15s ease-out",
         }}>
           <div style={{
-            background: "var(--surface)", border: "1px solid rgba(248,113,113,0.35)",
+            background: "var(--surface)", border: "1px solid rgba(213,115,115,0.35)",
             borderRadius: 16, padding: "28px 32px", maxWidth: 360, width: "90%",
             textAlign: "center", boxShadow: "0 16px 48px rgba(0,0,0,0.6)",
           }}>
             <div style={{
               width: 48, height: 48, borderRadius: "50%", margin: "0 auto 16px",
-              background: "rgba(248,113,113,0.12)", display: "flex", alignItems: "center", justifyContent: "center",
+              background: "rgba(213,115,115,0.12)", display: "flex", alignItems: "center", justifyContent: "center",
             }}>
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
                 <path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke="var(--error)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
@@ -113,7 +113,7 @@ function Lightbox({ photos, initialIndex, onClose, onRemove, onDeleteFromCloud }
                 disabled={deleteState === "deleting"}
                 style={{
                   flex: 1, padding: "10px 0", borderRadius: 10,
-                  background: "rgba(248,113,113,0.15)", border: "1px solid rgba(248,113,113,0.6)",
+                  background: "rgba(213,115,115,0.15)", border: "1px solid rgba(213,115,115,0.6)",
                   color: "var(--error)", fontFamily: "var(--font-display)",
                   fontWeight: 600, fontSize: "0.9rem",
                   cursor: deleteState === "deleting" ? "not-allowed" : "pointer",
@@ -121,7 +121,7 @@ function Lightbox({ photos, initialIndex, onClose, onRemove, onDeleteFromCloud }
                 }}
               >
                 {deleteState === "deleting" && (
-                  <span style={{ width: 14, height: 14, border: "2px solid rgba(248,113,113,0.3)", borderTop: "2px solid var(--error)", borderRadius: "50%", animation: "spin-slow 0.7s linear infinite" }} />
+                  <span style={{ width: 14, height: 14, border: "2px solid rgba(213,115,115,0.3)", borderTop: "2px solid var(--error)", borderRadius: "50%", animation: "spin-slow 0.7s linear infinite" }} />
                 )}
                 {deleteState === "deleting" ? "Siliniyor…" : "Evet, Sil"}
               </button>
@@ -164,7 +164,7 @@ function Lightbox({ photos, initialIndex, onClose, onRemove, onDeleteFromCloud }
         <button onClick={() => onRemove(photo)} style={{ padding: "5px 14px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text-muted)", fontFamily: "var(--font-body)", fontSize: "0.8rem", cursor: "pointer" }}>
           Çıkar
         </button>
-        <button onClick={() => setDeleteState("confirm")} style={{ padding: "5px 14px", borderRadius: 7, background: "transparent", border: "1px solid rgba(248,113,113,0.4)", color: "var(--error)", fontFamily: "var(--font-body)", fontSize: "0.8rem", cursor: "pointer", whiteSpace: "nowrap" }}>
+        <button onClick={() => setDeleteState("confirm")} style={{ padding: "5px 14px", borderRadius: 7, background: "transparent", border: "1px solid rgba(213,115,115,0.4)", color: "var(--error)", fontFamily: "var(--font-body)", fontSize: "0.8rem", cursor: "pointer", whiteSpace: "nowrap" }}>
           Buluttan Sil
         </button>
       </div>

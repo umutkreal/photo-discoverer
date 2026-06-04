@@ -57,7 +57,7 @@ function hexToRgba(hex: string, alpha: number): string {
 }
 
 function oc(op: Operation | undefined, alpha = 1): string {
-  const color = op?.color ?? "#7c6dfa";
+  const color = op?.color ?? "#383838";
   return alpha === 1 ? color : hexToRgba(color, alpha);
 }
 
@@ -1233,7 +1233,7 @@ function ImagePicker({ onPick }: { onPick: (img: PickedImage) => void }) {
         {/* Header */}
         <div style={{ padding: "20px 24px 0", borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-            <span style={{ fontSize: 14, color: "var(--violet)", textShadow: "0 0 8px rgba(124,109,250,0.4)" }}>✦</span>
+            <span style={{ fontSize: 14, color: "var(--violet)", textShadow: "0 0 8px rgba(56,56,56,0.4)" }}>✦</span>
             <span style={{ fontSize: 15, fontWeight: 600, color: "var(--text)", letterSpacing: "-0.3px" }}>Fotoğraf Seç</span>
           </div>
           <div style={{ display: "flex" }}>
@@ -1284,7 +1284,7 @@ function ImagePicker({ onPick }: { onPick: (img: PickedImage) => void }) {
                     background: "var(--violet)", color: "#fff",
                     fontFamily: "var(--body)", fontSize: 13,
                     fontWeight: 500, cursor: "pointer",
-                    boxShadow: "0 4px 14px -4px rgba(124,109,250,0.5)",
+                    boxShadow: "0 4px 14px -4px rgba(56,56,56,0.3)",
                   }}
                 >Ara</button>
               </form>
@@ -1359,7 +1359,7 @@ function ImagePicker({ onPick }: { onPick: (img: PickedImage) => void }) {
                         padding: "9px 22px", background: "var(--violet)", border: 0, borderRadius: 8,
                         color: "#fff", fontFamily: "var(--body)", fontSize: 13,
                         fontWeight: 500, cursor: "pointer",
-                        boxShadow: "0 4px 14px -4px rgba(124,109,250,0.5)",
+                        boxShadow: "0 4px 14px -4px rgba(56,56,56,0.3)",
                       }}
                     >Bu Fotoğrafı Kullan</button>
                   </div>
@@ -1377,7 +1377,7 @@ function ImagePicker({ onPick }: { onPick: (img: PickedImage) => void }) {
                   onMouseEnter={(e) => {
                     const el = e.currentTarget as HTMLDivElement;
                     el.style.borderColor = "var(--violet)";
-                    el.style.background = "rgba(124,109,250,0.04)";
+                    el.style.background = "rgba(255,255,255,0.04)";
                   }}
                   onMouseLeave={(e) => {
                     const el = e.currentTarget as HTMLDivElement;

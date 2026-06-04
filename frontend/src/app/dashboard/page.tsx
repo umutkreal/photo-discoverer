@@ -92,8 +92,8 @@ export default function DashboardPage() {
           style={{
             padding: "20px 24px",
             borderRadius: 16,
-            background: "linear-gradient(135deg, rgba(124,109,250,0.15), rgba(167,139,250,0.08))",
-            border: "1px solid rgba(124,109,250,0.3)",
+            background: "var(--accent-grad)",
+            border: "1px solid var(--border-2)",
             cursor: "pointer",
             marginBottom: 32,
             display: "flex",
@@ -103,11 +103,11 @@ export default function DashboardPage() {
           }}
           onMouseEnter={(e) => {
             (e.currentTarget as HTMLDivElement).style.transform = "translateY(-2px)";
-            (e.currentTarget as HTMLDivElement).style.borderColor = "rgba(124,109,250,0.6)";
+            (e.currentTarget as HTMLDivElement).style.borderColor = "var(--accent-2)";
           }}
           onMouseLeave={(e) => {
             (e.currentTarget as HTMLDivElement).style.transform = "translateY(0)";
-            (e.currentTarget as HTMLDivElement).style.borderColor = "rgba(124,109,250,0.3)";
+            (e.currentTarget as HTMLDivElement).style.borderColor = "var(--border-2)";
           }}
         >
           <div
@@ -322,8 +322,8 @@ function ResultCard({ state }: { state: ActionState }) {
       marginTop: 16,
       padding: "14px 18px",
       borderRadius: 12,
-      background: isError ? "rgba(248,113,113,0.08)" : "rgba(74,222,128,0.08)",
-      border: `1px solid ${isError ? "rgba(248,113,113,0.25)" : "rgba(74,222,128,0.25)"}`,
+      background: isError ? "rgba(213,115,115,0.08)" : "rgba(132,201,164,0.08)",
+      border: `1px solid ${isError ? "rgba(213,115,115,0.25)" : "rgba(132,201,164,0.25)"}`,
     }}>
       <p style={{
         fontFamily: "var(--font-body)",

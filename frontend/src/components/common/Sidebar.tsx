@@ -117,7 +117,7 @@ const MENU: MenuItem[] = [
 export const SIDEBAR_WIDTH           = 240;
 export const SIDEBAR_COLLAPSED_WIDTH = 64;
 
-const FONT = "-apple-system, 'SF Pro Display', BlinkMacSystemFont, 'Segoe UI', sans-serif";
+const FONT = "var(--font-body)";
 
 // ─── Component ───────────────────────────────────────────────
 
@@ -194,7 +194,7 @@ export default function Sidebar() {
       >
         <div style={{
           width: 34, height: 34, borderRadius: 9, flexShrink: 0,
-          background: "linear-gradient(135deg, var(--accent), #a78bfa)",
+          background: "linear-gradient(135deg, var(--accent), #525252)",
           display: "flex", alignItems: "center", justifyContent: "center",
         }}>
           <Logo />
@@ -302,7 +302,7 @@ export default function Sidebar() {
                     }}
                     onMouseEnter={(e) => {
                       const el = e.currentTarget as HTMLAnchorElement;
-                      el.style.background = danger ? "rgba(248,113,113,0.1)" : "rgba(255,255,255,0.06)";
+                      el.style.background = danger ? "rgba(213,115,115,0.1)" : "rgba(255,255,255,0.06)";
                       if (!danger) el.style.color = "var(--text)";
                     }}
                     onMouseLeave={(e) => {

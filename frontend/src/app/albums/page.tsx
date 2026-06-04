@@ -83,7 +83,7 @@ export default function AlbumsPage() {
         {/* Create form */}
         {showForm && (
           <form onSubmit={handleCreate} className="animate-fade-in" style={{
-            background: "var(--surface)", border: "1px solid rgba(124,109,250,0.3)",
+            background: "var(--surface)", border: "1px solid var(--border-2)",
             borderRadius: 14, padding: "18px 20px", marginBottom: 24,
             display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap",
           }}>
@@ -157,13 +157,13 @@ export default function AlbumsPage() {
               >
                 <Link href={`/albums/${album.album_id}`} style={{ textDecoration: "none", display: "block" }}>
                   <div style={{
-                    height: 120, background: "linear-gradient(135deg, rgba(124,109,250,0.15), rgba(167,139,250,0.08))",
+                    height: 120, background: "var(--surface-2)",
                     display: "flex", alignItems: "center", justifyContent: "center",
                   }}>
                     <svg width="36" height="36" viewBox="0 0 24 24" fill="none">
-                      <rect x="3" y="6" width="18" height="14" rx="2" stroke="rgba(124,109,250,0.5)" strokeWidth="1.5"/>
-                      <path d="M3 10h18" stroke="rgba(124,109,250,0.5)" strokeWidth="1.5"/>
-                      <path d="M8 3l4 3 4-3" stroke="rgba(124,109,250,0.5)" strokeWidth="1.5" strokeLinecap="round"/>
+                      <rect x="3" y="6" width="18" height="14" rx="2" stroke="var(--border-2)" strokeWidth="1.5"/>
+                      <path d="M3 10h18" stroke="var(--border-2)" strokeWidth="1.5"/>
+                      <path d="M8 3l4 3 4-3" stroke="var(--border-2)" strokeWidth="1.5" strokeLinecap="round"/>
                     </svg>
                   </div>
                   <div style={{ padding: "14px 16px 10px" }}>

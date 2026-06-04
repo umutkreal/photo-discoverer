@@ -154,33 +154,38 @@ const inputStyle: React.CSSProperties = {
   color: "var(--text)", fontFamily: "var(--font-body)", fontSize: "0.88rem", outline: "none",
 };
 
-// ─── Source Badge ─────────────────────────────────────────────
-
-function SourceBadge({ source }: { source: SourceKey }) {
-  const cfg = SOURCE_CONFIG[source];
-  return (
-    <div style={{
-      position: "absolute", bottom: 8, left: 8,
-      padding: "2px 8px", borderRadius: 5,
-      background: "rgba(0,0,0,0.75)", backdropFilter: "blur(8px)",
-      color: cfg.color, fontSize: "0.68rem", fontFamily: "var(--font-body)", fontWeight: 600,
-      border: `1px solid ${cfg.color}44`,
-    }}>
-      {cfg.label.replace("Google ", "G.")}
-    </div>
-  );
-}
 
 // ─── Add to Album button ──────────────────────────────────────
 
 function AddToAlbumButton({ photo }: { photo: PhotoResult }) {
-  const [open, setOpen]       = useState(false);
-  const [albums, setAlbums]   = useState<Album[]>([]);
-  const [busy, setBusy]       = useState(false);
-  const [done, setDone]       = useState<string | null>(null);
+  const [open, setOpen]         = useState(false);
+  const [albums, setAlbums]     = useState<Album[]>([]);
+  const [busy, setBusy]         = useState(false);
+  const [done, setDone]         = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName]   = useState("");
+  const [createBusy, setCreateBusy] = useState(false);
+  const wrapperRef              = useRef<HTMLDivElement>(null);
+  const inputRef                = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        setOpen(false); setCreating(false); setNewName("");
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  useEffect(() => {
+    if (creating) setTimeout(() => inputRef.current?.focus(), 50);
+  }, [creating]);
 
   const handleOpen = async (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (open) { setOpen(false); setCreating(false); setNewName(""); return; }
     setOpen(true); setBusy(true);
     try { const r = await albumApi.list(); setAlbums(r.albums); } catch {}
     finally { setBusy(false); }
@@ -195,49 +200,139 @@ function AddToAlbumButton({ photo }: { photo: PhotoResult }) {
         folder_path: photo.folder_path, file_size: photo.file_size ?? 0,
       });
       setDone(albumId);
-      setTimeout(() => { setOpen(false); setDone(null); }, 800);
+      setTimeout(() => { setOpen(false); setDone(null); setCreating(false); setNewName(""); }, 900);
     } catch {}
   };
 
+  const handleCreateAndAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const name = newName.trim();
+    if (!name) return;
+    setCreateBusy(true);
+    try {
+      const album = await albumApi.create(name);
+      await albumApi.addPhoto(album.album_id, {
+        source: photo.source, file_id: photo.file_id,
+        filename: photo.filename, drive_url: photo.drive_url,
+        folder_path: photo.folder_path, file_size: photo.file_size ?? 0,
+      });
+      setDone(album.album_id);
+      setAlbums((prev) => [...prev, { ...album, photo_count: 1 }]);
+      setTimeout(() => { setOpen(false); setDone(null); setCreating(false); setNewName(""); }, 900);
+    } catch {}
+    finally { setCreateBusy(false); }
+  };
+
   return (
-    <div style={{ position: "relative" }} onClick={(e) => e.stopPropagation()}>
+    <div ref={wrapperRef} style={{ position: "relative" }} onClick={(e) => e.stopPropagation()}>
       <button onClick={handleOpen} style={{
         padding: "4px 10px", borderRadius: 6,
-        background: "rgba(124,109,250,0.15)", border: "1px solid rgba(124,109,250,0.3)",
-        color: "var(--accent)", fontSize: "0.72rem", fontFamily: "var(--font-body)",
+        background: open ? "var(--accent-soft)" : "var(--accent)",
+        border: "1px solid transparent",
+        color: "#fff", fontSize: "0.72rem", fontFamily: "var(--font-body)",
         cursor: "pointer", whiteSpace: "nowrap",
       }}>
         + Albüm
       </button>
       {open && (
         <div style={{
-          position: "absolute", bottom: "calc(100% + 6px)", left: 0,
+          position: "absolute", bottom: "calc(100% + 6px)", right: 0,
           background: "var(--surface)", border: "1px solid var(--border)",
-          borderRadius: 10, padding: 8, minWidth: 180, zIndex: 50,
-          boxShadow: "0 8px 24px rgba(0,0,0,0.4)", animation: "fadeIn 0.15s ease-out",
+          borderRadius: 10, padding: 8, minWidth: 210, zIndex: 9999,
+          boxShadow: "0 8px 32px rgba(0,0,0,0.5)", animation: "fadeIn 0.15s ease-out",
         }}>
-          {busy && <p style={{ fontFamily: "var(--font-body)", fontSize: "0.78rem", color: "var(--text-muted)", padding: "4px 8px", margin: 0 }}>Yükleniyor...</p>}
-          {!busy && albums.length === 0 && <p style={{ fontFamily: "var(--font-body)", fontSize: "0.78rem", color: "var(--text-muted)", padding: "4px 8px", margin: 0 }}>Albüm yok — önce oluştur</p>}
+          <p style={{
+            fontFamily: "var(--font-body)", fontSize: "0.7rem", color: "var(--text-muted)",
+            padding: "2px 8px 6px", margin: 0, borderBottom: "1px solid var(--border)",
+            textTransform: "uppercase", letterSpacing: "0.05em",
+          }}>
+            Albüme ekle
+          </p>
+
+          {busy && (
+            <p style={{ fontFamily: "var(--font-body)", fontSize: "0.78rem", color: "var(--text-muted)", padding: "8px 8px 4px", margin: 0 }}>
+              Yükleniyor...
+            </p>
+          )}
+
+          {!busy && albums.length === 0 && !creating && (
+            <p style={{ fontFamily: "var(--font-body)", fontSize: "0.78rem", color: "var(--text-muted)", padding: "8px 8px 2px", margin: 0 }}>
+              Henüz albüm yok
+            </p>
+          )}
+
           {!busy && albums.map((a) => (
             <button key={a.album_id} onClick={(e) => handleAdd(e, a.album_id)} style={{
-              display: "block", width: "100%", textAlign: "left",
+              display: "flex", width: "100%", alignItems: "center", gap: 8, textAlign: "left",
               padding: "7px 10px", borderRadius: 7, border: "none",
-              background: done === a.album_id ? "rgba(74,222,128,0.15)" : "transparent",
+              background: done === a.album_id ? "rgba(132,201,164,0.15)" : "transparent",
               color: done === a.album_id ? "var(--success)" : "var(--text)",
               fontFamily: "var(--font-body)", fontSize: "0.82rem", cursor: "pointer",
-            }}>
-              {done === a.album_id ? "✓ Eklendi" : a.name}
+              transition: "background 0.12s",
+            }}
+            onMouseEnter={(e) => { if (done !== a.album_id) (e.currentTarget as HTMLButtonElement).style.background = "var(--surface-2)"; }}
+            onMouseLeave={(e) => { if (done !== a.album_id) (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
+            >
+              {done === a.album_id
+                ? <><span style={{ color: "var(--success)" }}>✓</span> Eklendi</>
+                : <><span style={{ fontSize: "0.85rem" }}>🖼</span> {a.name}</>
+              }
             </button>
           ))}
-          <button onClick={(e) => { e.stopPropagation(); setOpen(false); }} style={{
-            display: "block", width: "100%", textAlign: "left",
-            padding: "5px 10px", borderRadius: 7, border: "none",
-            background: "transparent", color: "var(--text-muted)",
-            fontFamily: "var(--font-body)", fontSize: "0.75rem", cursor: "pointer",
-            borderTop: "1px solid var(--border)", marginTop: 4,
-          }}>
-            Kapat
-          </button>
+
+          {/* Yeni albüm oluştur */}
+          <div style={{ borderTop: "1px solid var(--border)", marginTop: 6, paddingTop: 6 }}>
+            {!creating ? (
+              <button
+                onClick={(e) => { e.stopPropagation(); setCreating(true); }}
+                style={{
+                  display: "flex", width: "100%", alignItems: "center", gap: 8,
+                  padding: "7px 10px", borderRadius: 7, border: "none",
+                  background: "transparent", color: "var(--text)",
+                  fontFamily: "var(--font-body)", fontSize: "0.82rem", cursor: "pointer",
+                  transition: "background 0.12s",
+                }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "var(--surface-2)"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
+              >
+                <span style={{ fontSize: "1rem", lineHeight: 1 }}>+</span> Yeni albüm oluştur ve ekle
+              </button>
+            ) : (
+              <form onSubmit={handleCreateAndAdd} onClick={(e) => e.stopPropagation()} style={{ display: "flex", gap: 6, padding: "4px 2px" }}>
+                <input
+                  ref={inputRef}
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="Albüm adı..."
+                  disabled={createBusy}
+                  onKeyDown={(e) => { if (e.key === "Escape") { setCreating(false); setNewName(""); } }}
+                  style={{
+                    flex: 1, padding: "6px 9px", borderRadius: 7,
+                    background: "var(--bg)", border: "1px solid var(--border)",
+                    color: "var(--text)", fontFamily: "var(--font-body)", fontSize: "0.82rem",
+                    outline: "none", minWidth: 0,
+                  }}
+                />
+                <button
+                  type="submit"
+                  disabled={createBusy || !newName.trim()}
+                  style={{
+                    padding: "6px 10px", borderRadius: 7, border: "none",
+                    background: newName.trim() ? "var(--accent)" : "var(--surface-2)",
+                    color: newName.trim() ? "#fff" : "var(--text-muted)",
+                    fontFamily: "var(--font-body)", fontSize: "0.8rem",
+                    cursor: newName.trim() ? "pointer" : "not-allowed",
+                    whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 4,
+                  }}
+                >
+                  {createBusy
+                    ? <span style={{ width: 12, height: 12, border: "2px solid rgba(255,255,255,0.3)", borderTop: "2px solid #fff", borderRadius: "50%", animation: "spin-slow 0.7s linear infinite" }} />
+                    : "Oluştur"}
+                </button>
+              </form>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -249,25 +344,29 @@ function AddToAlbumButton({ photo }: { photo: PhotoResult }) {
 function PhotoCard({ photo, index, onClick }: { photo: PhotoResult; index: number; onClick: () => void }) {
   const [imgError, setImgError] = useState(false);
   const imgSrc = thumbnailUrl(photo.file_id, photo.source);
+  const cfg = SOURCE_CONFIG[photo.source];
+  const textColor = cfg.light ? "#15212b" : "#fff";
+  const metaColor = cfg.light ? "rgba(0,0,0,0.55)" : "rgba(255,255,255,0.72)";
   return (
     <div
       onClick={onClick}
       style={{
-        borderRadius: 14, overflow: "hidden", background: "var(--surface)",
+        borderRadius: 14, background: "var(--surface)",
         border: "1px solid var(--border)", cursor: "pointer",
         transition: "transform 0.2s, border-color 0.2s",
         animation: `fadeIn 0.4s ease-out ${index * 0.04}s both`,
+        position: "relative",
       }}
       onMouseEnter={(e) => {
         (e.currentTarget as HTMLDivElement).style.transform = "translateY(-4px)";
-        (e.currentTarget as HTMLDivElement).style.borderColor = SOURCE_CONFIG[photo.source]?.color ?? "var(--accent)";
+        (e.currentTarget as HTMLDivElement).style.borderColor = cfg.color;
       }}
       onMouseLeave={(e) => {
         (e.currentTarget as HTMLDivElement).style.transform = "translateY(0)";
         (e.currentTarget as HTMLDivElement).style.borderColor = "var(--border)";
       }}
     >
-      <div style={{ position: "relative", paddingBottom: "75%", background: "var(--surface-2)" }}>
+      <div style={{ position: "relative", paddingBottom: "75%", background: "var(--surface-2)", borderRadius: "14px 14px 0 0", overflow: "hidden" }}>
         {!imgError ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={imgSrc} alt={photo.filename} onError={() => setImgError(true)}
@@ -280,30 +379,34 @@ function PhotoCard({ photo, index, onClick }: { photo: PhotoResult; index: numbe
             </svg>
           </div>
         )}
+        {/* Score — transparent bg */}
         <div style={{
-          position: "absolute", top: 8, right: 8, padding: "3px 8px", borderRadius: 6,
-          background: "rgba(0,0,0,0.7)", backdropFilter: "blur(8px)",
-          color: "white", fontSize: "0.72rem", fontFamily: "monospace",
+          position: "absolute", top: 8, right: 8,
+          color: "#fff", fontSize: "0.72rem", fontFamily: "var(--font-mono)", fontWeight: 600,
+          textShadow: "0 1px 4px rgba(0,0,0,0.85)",
         }}>
           {(photo.score * 100).toFixed(0)}%
         </div>
-        <SourceBadge source={photo.source} />
       </div>
-      <div style={{ padding: "10px 12px" }}>
+      {/* Source-colored card body */}
+      <div style={{ padding: "10px 12px", background: cfg.srcBg }}>
         <p style={{
-          fontFamily: "var(--font-body)", fontSize: "0.82rem", color: "var(--text-muted)",
-          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          fontFamily: "var(--font-body)", fontSize: "0.85rem", color: textColor,
+          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", margin: 0,
         }}>
           {photo.filename}
         </p>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 4 }}>
-          {(photo.year || photo.camera_make) ? (
-            <p style={{ fontFamily: "var(--font-body)", fontSize: "0.72rem", color: "var(--text-muted)", opacity: 0.7, margin: 0 }}>
-              {[photo.year, photo.camera_make].filter(Boolean).join(" · ")}
-            </p>
-          ) : <span />}
+          <span style={{ fontFamily: "var(--font-body)", fontSize: "0.75rem", fontWeight: 700, color: "#000" }}>
+            {SOURCE_CONFIG[photo.source].label}
+          </span>
           <AddToAlbumButton photo={photo} />
         </div>
+        {(photo.year || photo.camera_make) && (
+          <p style={{ fontFamily: "var(--font-body)", fontSize: "0.58rem", color: metaColor, margin: "3px 0 0" }}>
+            {[photo.year, photo.camera_make].filter(Boolean).join(" · ")}
+          </p>
+        )}
       </div>
     </div>
   );
@@ -370,13 +473,13 @@ function PhotoModal({ photo, onClose, onEditClick, onDelete }: { photo: PhotoRes
             animation: "fadeIn 0.15s ease-out",
           }}>
             <div style={{
-              background: "var(--surface)", border: "1px solid rgba(248,113,113,0.35)",
+              background: "var(--surface)", border: "1px solid rgba(213,115,115,0.35)",
               borderRadius: 16, padding: "28px 32px", maxWidth: 360, width: "90%",
               textAlign: "center", boxShadow: "0 16px 48px rgba(0,0,0,0.6)",
             }}>
               <div style={{
                 width: 48, height: 48, borderRadius: "50%", margin: "0 auto 16px",
-                background: "rgba(248,113,113,0.12)", display: "flex", alignItems: "center", justifyContent: "center",
+                background: "rgba(213,115,115,0.12)", display: "flex", alignItems: "center", justifyContent: "center",
               }}>
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
                   <path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke="var(--error)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
@@ -407,7 +510,7 @@ function PhotoModal({ photo, onClose, onEditClick, onDelete }: { photo: PhotoRes
                   disabled={deleteState === "deleting"}
                   style={{
                     flex: 1, padding: "10px 0", borderRadius: 10,
-                    background: "rgba(248,113,113,0.15)", border: "1px solid rgba(248,113,113,0.6)",
+                    background: "rgba(213,115,115,0.15)", border: "1px solid rgba(213,115,115,0.6)",
                     color: "var(--error)", fontFamily: "var(--font-display)",
                     fontWeight: 600, fontSize: "0.9rem",
                     cursor: deleteState === "deleting" ? "not-allowed" : "pointer",
@@ -415,7 +518,7 @@ function PhotoModal({ photo, onClose, onEditClick, onDelete }: { photo: PhotoRes
                   }}
                 >
                   {deleteState === "deleting" && (
-                    <span style={{ width: 14, height: 14, border: "2px solid rgba(248,113,113,0.3)", borderTop: "2px solid var(--error)", borderRadius: "50%", animation: "spin-slow 0.7s linear infinite" }} />
+                    <span style={{ width: 14, height: 14, border: "2px solid rgba(213,115,115,0.3)", borderTop: "2px solid var(--error)", borderRadius: "50%", animation: "spin-slow 0.7s linear infinite" }} />
                   )}
                   {deleteState === "deleting" ? "Siliniyor…" : "Evet, Sil"}
                 </button>
@@ -440,8 +543,8 @@ function PhotoModal({ photo, onClose, onEditClick, onDelete }: { photo: PhotoRes
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
             <span style={{
               padding: "3px 10px", borderRadius: 6,
-              background: "rgba(124,109,250,0.15)", color: "var(--accent)",
-              fontSize: "0.8rem", fontFamily: "monospace",
+              background: "rgba(255,255,255,0.1)", color: "var(--text)",
+              fontSize: "0.8rem", fontFamily: "var(--font-mono)",
             }}>
               {(photo.score * 100).toFixed(1)}%
             </span>
@@ -476,7 +579,7 @@ function PhotoModal({ photo, onClose, onEditClick, onDelete }: { photo: PhotoRes
                   <span style={{ fontFamily: "var(--font-body)", fontSize: "0.75rem", color: "var(--text-muted)", whiteSpace: "nowrap" }}>
                     {label}
                   </span>
-                  <span style={{ fontFamily: "monospace", fontSize: "0.78rem", color: "var(--text)" }}>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.78rem", color: "var(--text)" }}>
                     {value}
                   </span>
                 </React.Fragment>
@@ -492,7 +595,7 @@ function PhotoModal({ photo, onClose, onEditClick, onDelete }: { photo: PhotoRes
           <div style={{ display: "flex", gap: 10 }}>
             <button onClick={() => setDeleteState("confirm")} style={{
               padding: "10px 16px", borderRadius: 10,
-              background: "transparent", border: "1px solid rgba(248,113,113,0.5)",
+              background: "transparent", border: "1px solid rgba(213,115,115,0.5)",
               color: "var(--error)", fontFamily: "var(--font-display)",
               fontWeight: 600, fontSize: "0.9rem", cursor: "pointer", whiteSpace: "nowrap",
             }}>
@@ -508,7 +611,7 @@ function PhotoModal({ photo, onClose, onEditClick, onDelete }: { photo: PhotoRes
             </a>
             <button onClick={onEditClick} style={{
               padding: "10px 16px", borderRadius: 10,
-              background: "linear-gradient(135deg, var(--accent), #a78bfa)",
+              background: "var(--accent-grad)",
               border: "none", color: "white",
               fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "0.9rem", cursor: "pointer",
               whiteSpace: "nowrap",
@@ -639,9 +742,9 @@ export default function SearchPage() {
                   onClick={() => setShowFilters((v) => !v)}
                   style={{
                     padding: "8px 14px", borderRadius: 10,
-                    background: (showFilters || hasActiveFilters) ? "rgba(124,109,250,0.15)" : "var(--surface-2)",
-                    border: `1px solid ${(showFilters || hasActiveFilters) ? "var(--accent)" : "var(--border)"}`,
-                    color: (showFilters || hasActiveFilters) ? "var(--accent)" : "var(--text-muted)",
+                    background: (showFilters || hasActiveFilters) ? "var(--accent-soft)" : "var(--surface-2)",
+                    border: `1px solid ${(showFilters || hasActiveFilters) ? "var(--accent-2)" : "var(--border)"}`,
+                    color: (showFilters || hasActiveFilters) ? "var(--text)" : "var(--text-muted)",
                     fontFamily: "var(--font-body)", fontSize: "0.82rem", cursor: "pointer",
                     display: "flex", alignItems: "center", gap: 5, whiteSpace: "nowrap",
                   }}
@@ -655,7 +758,7 @@ export default function SearchPage() {
                   type="submit" disabled={isSearching || !query.trim()}
                   style={{
                     padding: "10px 22px", borderRadius: 11,
-                    background: query.trim() ? "var(--accent)" : "var(--surface-2)",
+                    background: query.trim() ? "var(--accent-grad)" : "var(--surface-2)",
                     color: "white", border: "none",
                     cursor: query.trim() ? "pointer" : "not-allowed",
                     fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "0.9rem",
@@ -675,17 +778,17 @@ export default function SearchPage() {
             </form>
 
             {/* Source filter pills */}
-            <div style={{ marginTop: 12, display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
               {SOURCES.map(({ key, label }) => {
                 const active = (filters.source ?? null) === key;
-                const cfg = key ? SOURCE_CONFIG[key] : null;
                 return (
                   <button key={String(key)} onClick={() => handleSourceChange(key)} style={{
-                    padding: "4px 14px", borderRadius: 100,
-                    border: `1px solid ${active ? (cfg?.color ?? "var(--accent)") : "var(--border)"}`,
-                    background: active ? (cfg?.bg ?? "rgba(124,109,250,0.15)") : "transparent",
-                    color: active ? (cfg?.color ?? "var(--accent)") : "var(--text-muted)",
-                    fontSize: "0.8rem", cursor: "pointer", fontFamily: "var(--font-body)", transition: "all 0.15s",
+                    padding: "6px 21px", borderRadius: 100,
+                    border: `1px solid ${active ? "var(--border-2)" : "var(--border)"}`,
+                    background: active ? "var(--surface-2)" : "transparent",
+                    color: active ? "var(--text)" : "var(--text-muted)",
+                    fontWeight: active ? 500 : 400,
+                    fontSize: "1.2rem", cursor: "pointer", fontFamily: "var(--font-body)", transition: "all 0.15s",
                   }}>
                     {label}
                   </button>
@@ -706,7 +809,7 @@ export default function SearchPage() {
           {error && (
             <div style={{
               padding: "16px 20px", borderRadius: 12, marginBottom: 24,
-              background: "rgba(248,113,113,0.1)", border: "1px solid rgba(248,113,113,0.25)",
+              background: "rgba(213,115,115,0.1)", border: "1px solid rgba(213,115,115,0.25)",
               color: "var(--error)", fontFamily: "var(--font-body)",
             }}>
               {error}
@@ -746,7 +849,9 @@ export default function SearchPage() {
                 {filters.source && (
                   <span style={{
                     marginLeft: 8, padding: "2px 8px", borderRadius: 4,
-                    background: SOURCE_CONFIG[filters.source].bg, color: SOURCE_CONFIG[filters.source].color, fontSize: "0.78rem",
+                    background: SOURCE_CONFIG[filters.source].srcBg,
+                    color: SOURCE_CONFIG[filters.source].light ? "#000" : "#fff",
+                    fontSize: "0.78rem", fontWeight: 600,
                   }}>
                     {SOURCE_CONFIG[filters.source].label}
                   </span>
