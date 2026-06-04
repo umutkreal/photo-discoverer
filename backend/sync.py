@@ -11,6 +11,17 @@ from embedding import foto_vektore_cevir
 from qdrant_db import collection_olustur, fotograf_kaydet, toplu_fotograf_sil, file_id_to_point_id
 from token_store import page_token_kaydet, page_token_getir, sil as token_sil
 from album_store import fotograf_cikar_global as album_fotograf_cikar_global
+from token_refresh import onedrive_token_yenile
+
+
+def _is_onedrive_401(e: Exception) -> bool:
+    return hasattr(e, "response") and getattr(e.response, "status_code", None) == 401
+
+
+def _onedrive_refresh(user_id: str, creds: dict) -> tuple[dict, object]:
+    """Token yenile, yeni (creds, provider) döndür."""
+    new_creds = onedrive_token_yenile(user_id, creds["refresh_token"])
+    return new_creds, provider_getir("onedrive", new_creds)
 
 
 def index_all(qdrant_client, col_name, user_id, all_credentials: dict, limit=500, folder_id=None):
@@ -39,9 +50,21 @@ def index_all(qdrant_client, col_name, user_id, all_credentials: dict, limit=500
             print(f"  ❌ [{source}] kimlik doğrulama hatası, token silindi: {e}")
             continue
         except Exception as e:
-            all_errors.append({"source": source, "error": f"Liste alınamadı: {e}"})
-            print(f"  ❌ [{source}] liste hatası: {e}")
-            continue
+            if source == "onedrive" and _is_onedrive_401(e):
+                print(f"  🔄 [{source}] 401 — token yenileniyor...")
+                try:
+                    creds, provider = _onedrive_refresh(user_id, creds)
+                    fotolar = provider.fotograflari_listele(klasor_id=folder_id, limit=limit)
+                except Exception as re:
+                    token_sil(user_id, source)
+                    needs_reauth.append(source)
+                    all_errors.append({"source": source, "error": str(re), "auth_required": True})
+                    print(f"  ❌ [{source}] token yenileme başarısız: {re}")
+                    continue
+            else:
+                all_errors.append({"source": source, "error": f"Liste alınamadı: {e}"})
+                print(f"  ❌ [{source}] liste hatası: {e}")
+                continue
 
         total_found += len(fotolar)
 
@@ -124,9 +147,21 @@ def delta_sync(qdrant_client, col_name, user_id, all_credentials: dict):
             print(f"  ❌ [{source}] kimlik doğrulama hatası, token silindi: {e}")
             continue
         except Exception as e:
-            all_errors.append({"source": source, "error": f"Değişiklik alınamadı: {e}"})
-            print(f"  ❌ [{source}] değişiklik hatası: {e}")
-            continue
+            if source == "onedrive" and _is_onedrive_401(e):
+                print(f"  🔄 [{source}] 401 — token yenileniyor...")
+                try:
+                    creds, provider = _onedrive_refresh(user_id, creds)
+                    eklenenler, silinenler, yeni_token = provider.degisiklikleri_getir(saved_token)
+                except Exception as re:
+                    token_sil(user_id, source)
+                    needs_reauth.append(source)
+                    all_errors.append({"source": source, "error": str(re), "auth_required": True})
+                    print(f"  ❌ [{source}] token yenileme başarısız: {re}")
+                    continue
+            else:
+                all_errors.append({"source": source, "error": f"Değişiklik alınamadı: {e}"})
+                print(f"  ❌ [{source}] değişiklik hatası: {e}")
+                continue
 
         # Delta'dan gelen silmeler
         if silinenler:

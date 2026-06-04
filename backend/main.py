@@ -839,22 +839,37 @@ def thumbnail(
             raise HTTPException(status_code=500, detail=f"pCloud thumbnail hatası: {e}")
 
     if source == "onedrive":
+        from token_refresh import onedrive_token_yenile
+
         creds = store.getir(user_id, "onedrive")
         if not creds:
             raise HTTPException(status_code=401, detail="OneDrive oturumu bulunamadı")
 
-        try:
-            headers = {"Authorization": f"Bearer {creds['access_token']}"}
+        def _onedrive_thumb(access_token: str) -> str:
+            headers = {"Authorization": f"Bearer {access_token}"}
             resp = _httpx.get(
                 f"https://graph.microsoft.com/v1.0/me/drive/items/{file_id}/thumbnails/0/medium",
                 headers=headers,
                 timeout=15,
             )
             resp.raise_for_status()
-            thumb_url = resp.json().get("url", "")
-            return RedirectResponse(url=thumb_url, status_code=302)
+            return resp.json().get("url", "")
+
+        try:
+            thumb_url = _onedrive_thumb(creds["access_token"])
+        except _httpx.HTTPStatusError as e:
+            if e.response.status_code == 401:
+                try:
+                    creds = onedrive_token_yenile(user_id, creds["refresh_token"])
+                    thumb_url = _onedrive_thumb(creds["access_token"])
+                except Exception as re:
+                    raise HTTPException(status_code=401, detail=f"OneDrive token yenileme başarısız: {re}")
+            else:
+                raise HTTPException(status_code=500, detail=f"OneDrive thumbnail hatası: {e}")
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"OneDrive thumbnail hatası: {e}")
+
+        return RedirectResponse(url=thumb_url, status_code=302)
 
     raise HTTPException(status_code=400, detail=f"Thumbnail proxy desteklenmiyor: {source}")
 

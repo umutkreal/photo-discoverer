@@ -172,7 +172,7 @@ export default function Sidebar() {
           display: "flex",
           alignItems: "center",
           flexShrink: 0,
-          minHeight: 75,
+          minHeight: 64,
           width: "100%",
           padding: 0,
           background: "transparent",
@@ -187,7 +187,7 @@ export default function Sidebar() {
         {/* Fixed icon zone — always centered in SIDEBAR_COLLAPSED_WIDTH */}
         <span style={{
           width: SIDEBAR_COLLAPSED_WIDTH,
-          height: 75,
+          height: 64,
           flexShrink: 0,
           display: "flex",
           justifyContent: "center",
@@ -202,7 +202,7 @@ export default function Sidebar() {
           </div>
         </span>
         {/* Sliding text */}
-        <span style={{ ...slideStyle, fontSize: 15, fontWeight: 600, color: "var(--text)", letterSpacing: "-0.3px", paddingRight: 16 }}>
+        <span style={{ ...slideStyle, fontSize: 19, fontWeight: 600, color: "var(--text)", letterSpacing: "-0.3px", paddingRight: 16 }}>
           PhotoMind
         </span>
       </button>
@@ -250,7 +250,7 @@ export default function Sidebar() {
               {/* Sliding label */}
               <span style={{
                 ...slideStyle,
-                fontSize: 14,
+                fontSize: 18,
                 fontWeight: active ? 500 : 400,
                 paddingRight: 10,
               }}>
@@ -275,11 +275,11 @@ export default function Sidebar() {
                 position: "absolute",
                 bottom: "calc(100% + 8px)",
                 left: 10,
-                width: 218,
+                width: 270,
                 background: "var(--surface-2)",
                 border: "1px solid var(--border)",
-                borderRadius: 12,
-                padding: 6,
+                borderRadius: 16,
+                padding: 8,
                 boxShadow: "0 8px 32px rgba(0,0,0,0.5), 0 2px 8px rgba(0,0,0,0.3)",
                 zIndex: 100,
                 animation: "sbMenuIn 0.14s ease",
@@ -288,10 +288,10 @@ export default function Sidebar() {
               <style>{`@keyframes sbMenuIn { from { opacity:0; transform:translateY(6px) scale(0.97); } to { opacity:1; transform:translateY(0) scale(1); } }`}</style>
 
               <div style={{
-                padding: "7px 10px 9px",
-                fontSize: 11, color: "var(--text-muted)",
+                padding: "10px 14px 12px",
+                fontSize: 13, color: "var(--text-muted)",
                 borderBottom: "1px solid var(--border)",
-                marginBottom: 4, fontFamily: FONT,
+                marginBottom: 6, fontFamily: FONT,
               }}>
                 {user.email}
               </div>
@@ -310,9 +310,9 @@ export default function Sidebar() {
                       else setMenuOpen(false);
                     }}
                     style={{
-                      display: "flex", alignItems: "center", gap: 10,
-                      padding: "8px 10px", borderRadius: 7,
-                      fontSize: 13.5,
+                      display: "flex", alignItems: "center", gap: 12,
+                      padding: "11px 14px", borderRadius: 9,
+                      fontSize: 17,
                       color: danger ? "var(--error)" : "var(--text-muted)",
                       cursor: "pointer", textDecoration: "none",
                       fontFamily: FONT, transition: "background 0.1s, color 0.1s",
@@ -387,10 +387,10 @@ export default function Sidebar() {
             {/* Sliding name/email/chevron */}
             <span style={{ ...slideStyle, flex: 1, minWidth: 0, display: "flex", alignItems: "center", paddingRight: 12 }}>
               <span style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
-                <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <div style={{ fontSize: 17, fontWeight: 500, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {user.name}
                 </div>
-                <div style={{ fontSize: 11, color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <div style={{ fontSize: 14, color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {user.email}
                 </div>
               </span>

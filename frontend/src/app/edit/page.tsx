@@ -87,27 +87,36 @@ function TopBar({
       background: "var(--bg)",
       borderBottom: "1px solid rgba(255,255,255,0.05)",
     }}>
-      {/* Left — change image */}
-      <div>
+      {/* Left — zoom + change image */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <button onClick={() => setZoom(Math.max(0.25, zoom - 0.1))} style={zoomBtnStyle}>−</button>
+        <span style={{ fontFamily: "var(--mono)", fontSize: 14, color: "var(--dim)", minWidth: 46, textAlign: "center", fontVariantNumeric: "tabular-nums" }}>
+          {Math.round(zoom * 100)}%
+        </span>
+        <button onClick={() => setZoom(Math.min(3, zoom + 0.1))} style={zoomBtnStyle}>+</button>
+
         {hasImage && (
-          <button
-            onClick={onChangeImage}
-            style={{
-              display: "flex", alignItems: "center", gap: 8,
-              padding: "7px 14px", borderRadius: 8, border: 0,
-              background: "transparent", color: "var(--dimmer)",
-              fontFamily: "var(--body)", fontSize: 14, cursor: "pointer",
-              transition: "color 0.12s",
-            }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "var(--text)"; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "var(--dimmer)"; }}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
-              <polyline points="21 15 16 10 5 21"/>
-            </svg>
-            Fotoğraf Değiştir
-          </button>
+          <>
+            <span style={{ width: 1, height: 14, background: "rgba(255,255,255,0.08)", margin: "0 4px" }} />
+            <button
+              onClick={onChangeImage}
+              style={{
+                display: "flex", alignItems: "center", gap: 8,
+                padding: "7px 14px", borderRadius: 8, border: 0,
+                background: "transparent", color: "var(--dimmer)",
+                fontFamily: "var(--body)", fontSize: 14, cursor: "pointer",
+                transition: "color 0.12s",
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "var(--text)"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "var(--dimmer)"; }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
+                <polyline points="21 15 16 10 5 21"/>
+              </svg>
+              Fotoğraf Değiştir
+            </button>
+          </>
         )}
       </div>
 
@@ -135,16 +144,8 @@ function TopBar({
         ))}
       </div>
 
-      {/* Right — zoom + download + save */}
+      {/* Right — download + save */}
       <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }}>
-        <button onClick={() => setZoom(Math.max(0.25, zoom - 0.1))} style={zoomBtnStyle}>−</button>
-        <span style={{ fontFamily: "var(--mono)", fontSize: 14, color: "var(--dim)", minWidth: 46, textAlign: "center", fontVariantNumeric: "tabular-nums" }}>
-          {Math.round(zoom * 100)}%
-        </span>
-        <button onClick={() => setZoom(Math.min(3, zoom + 0.1))} style={zoomBtnStyle}>+</button>
-
-        <span style={{ width: 1, height: 14, background: "rgba(255,255,255,0.08)", margin: "0 4px" }} />
-
         <button
           onClick={download}
           disabled={!resultImage}
@@ -1000,7 +1001,7 @@ function AIEditPanel({
   return (
     <aside style={{
       width: 460, flexShrink: 0, height: "100%",
-      background: "var(--bg)", borderLeft: "1px solid rgba(255,255,255,0.05)",
+      background: "var(--surface)", borderLeft: "1px solid var(--border)",
       display: "flex", flexDirection: "column", fontFamily: "var(--body)",
     }}>
       {/* Accent strip */}
@@ -1012,7 +1013,8 @@ function AIEditPanel({
 
       {/* Header */}
       <header style={{
-        padding: "18px 24px 16px", borderBottom: "1px solid rgba(255,255,255,0.05)",
+        height: 64, flexShrink: 0, padding: "0 24px",
+        borderBottom: "1px solid rgba(255,255,255,0.05)",
         display: "flex", alignItems: "center", justifyContent: "space-between",
       }}>
         {/* Left — active model name */}
