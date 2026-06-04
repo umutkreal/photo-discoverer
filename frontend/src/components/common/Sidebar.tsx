@@ -8,7 +8,7 @@ import { useAuth } from "@/hooks/useAuth";
 // ─── Icons ────────────────────────────────────────────────────
 
 const Logo = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+  <svg width="27" height="27" viewBox="0 0 24 24" fill="none">
     <rect x="2" y="2" width="9" height="9" rx="2" fill="white" opacity="0.9"/>
     <rect x="13" y="2" width="9" height="9" rx="2" fill="white" opacity="0.6"/>
     <rect x="2" y="13" width="9" height="9" rx="2" fill="white" opacity="0.6"/>
@@ -18,14 +18,14 @@ const Logo = () => (
 
 
 const ISearch = () => (
-  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
     <circle cx="11" cy="11" r="7"/>
     <path d="m21 21-4.35-4.35"/>
   </svg>
 );
 
 const IAlbums = () => (
-  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
     <rect x="3" y="3" width="18" height="18" rx="2"/>
     <path d="M3 9h18"/>
     <path d="M9 21V9"/>
@@ -33,14 +33,14 @@ const IAlbums = () => (
 );
 
 const IDuplicates = () => (
-  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
     <rect x="8" y="8" width="13" height="13" rx="2"/>
     <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
   </svg>
 );
 
 const IEdit = () => (
-  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
     <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
   </svg>
 );
@@ -97,8 +97,11 @@ const MENU: MenuItem[] = [
 
 // ─── Constants ───────────────────────────────────────────────
 
-export const SIDEBAR_WIDTH           = 240;
-export const SIDEBAR_COLLAPSED_WIDTH = 64;
+export const SIDEBAR_WIDTH           = 288;
+export const SIDEBAR_COLLAPSED_WIDTH = 77;
+
+// Icon zone width for nav links (accounts for 8px margin on each side)
+const ICON_ZONE_W = SIDEBAR_COLLAPSED_WIDTH - 16;
 
 const FONT = "var(--font-body)";
 
@@ -136,6 +139,14 @@ export default function Sidebar() {
 
   const w = collapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_WIDTH;
 
+  const slideStyle = {
+    overflow: "hidden" as const,
+    maxWidth: collapsed ? 0 : 200,
+    opacity: collapsed ? 0 : 1,
+    transition: "max-width 0.2s ease, opacity 0.15s ease",
+    whiteSpace: "nowrap" as const,
+  };
+
   return (
     <aside
       style={{
@@ -157,15 +168,13 @@ export default function Sidebar() {
         onClick={() => setCollapsed(v => !v)}
         title={collapsed ? "Open sidebar" : "Close sidebar"}
         style={{
-          padding: collapsed ? "18px 0" : "20px 16px",
           borderBottom: "1px solid var(--border)",
           display: "flex",
           alignItems: "center",
-          justifyContent: collapsed ? "center" : "flex-start",
-          gap: 10,
           flexShrink: 0,
-          minHeight: 65,
+          minHeight: 75,
           width: "100%",
+          padding: 0,
           background: "transparent",
           border: "none",
           cursor: "pointer",
@@ -175,22 +184,31 @@ export default function Sidebar() {
         onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.04)"; }}
         onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
       >
-        <div style={{
-          width: 34, height: 34, borderRadius: 9, flexShrink: 0,
-          background: "linear-gradient(135deg, var(--accent), #525252)",
-          display: "flex", alignItems: "center", justifyContent: "center",
+        {/* Fixed icon zone — always centered in SIDEBAR_COLLAPSED_WIDTH */}
+        <span style={{
+          width: SIDEBAR_COLLAPSED_WIDTH,
+          height: 75,
+          flexShrink: 0,
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
         }}>
-          <Logo />
-        </div>
-        {!collapsed && (
-          <span style={{ fontSize: 15, fontWeight: 600, color: "var(--text)", letterSpacing: "-0.3px", whiteSpace: "nowrap" }}>
-            PhotoMind
-          </span>
-        )}
+          <div style={{
+            width: 51, height: 51, borderRadius: 14, flexShrink: 0,
+            background: "linear-gradient(135deg, var(--accent), #525252)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <Logo />
+          </div>
+        </span>
+        {/* Sliding text */}
+        <span style={{ ...slideStyle, fontSize: 15, fontWeight: 600, color: "var(--text)", letterSpacing: "-0.3px", paddingRight: 16 }}>
+          PhotoMind
+        </span>
       </button>
 
       {/* Nav */}
-      <nav style={{ flex: 1, padding: "8px", display: "flex", flexDirection: "column", gap: 1 }}>
+      <nav style={{ flex: 1, padding: "8px 0", display: "flex", flexDirection: "column", gap: 14 }}>
         {NAV.map(({ href, label, Icon }) => {
           const active = pathname === href || pathname.startsWith(href);
           return (
@@ -201,17 +219,14 @@ export default function Sidebar() {
               style={{
                 display: "flex",
                 alignItems: "center",
-                justifyContent: collapsed ? "center" : "flex-start",
-                gap: collapsed ? 0 : 10,
-                padding: collapsed ? "9px 0" : "9px 10px",
+                margin: "0 8px",
+                padding: 0,
                 borderRadius: 8,
                 textDecoration: "none",
                 color: active ? "var(--text)" : "var(--text-muted)",
                 background: active ? "var(--surface-2)" : "transparent",
-                fontSize: 14,
-                fontWeight: active ? 500 : 400,
+                overflow: "hidden",
                 transition: "background 0.12s, color 0.12s",
-                whiteSpace: "nowrap",
               }}
               onMouseEnter={(e) => {
                 if (!active) (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.05)";
@@ -220,8 +235,27 @@ export default function Sidebar() {
                 if (!active) (e.currentTarget as HTMLAnchorElement).style.background = "transparent";
               }}
             >
-              <span style={{ flexShrink: 0, opacity: active ? 1 : 0.7 }}><Icon /></span>
-              {!collapsed && label}
+              {/* Fixed icon zone */}
+              <span style={{
+                width: ICON_ZONE_W,
+                height: 39,
+                flexShrink: 0,
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                opacity: active ? 1 : 0.7,
+              }}>
+                <Icon />
+              </span>
+              {/* Sliding label */}
+              <span style={{
+                ...slideStyle,
+                fontSize: 14,
+                fontWeight: active ? 500 : 400,
+                paddingRight: 10,
+              }}>
+                {label}
+              </span>
             </Link>
           );
         })}
@@ -310,9 +344,7 @@ export default function Sidebar() {
             style={{
               display: "flex",
               alignItems: "center",
-              justifyContent: collapsed ? "center" : "flex-start",
-              gap: 10,
-              padding: collapsed ? "12px 0" : "12px 12px",
+              padding: 0,
               width: "100%",
               background: menuOpen ? "rgba(255,255,255,0.04)" : "transparent",
               border: "none",
@@ -320,6 +352,7 @@ export default function Sidebar() {
               cursor: "pointer",
               transition: "background 0.12s",
               fontFamily: FONT,
+              overflow: "hidden",
             }}
             onMouseEnter={(e) => {
               if (!menuOpen) (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.04)";
@@ -328,36 +361,45 @@ export default function Sidebar() {
               if (!menuOpen) (e.currentTarget as HTMLButtonElement).style.background = "transparent";
             }}
           >
-            {user.picture ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={user.picture} alt={user.name} style={{ width: 30, height: 30, borderRadius: "50%", flexShrink: 0 }} />
-            ) : (
-              <div style={{
-                width: 30, height: 30, borderRadius: "50%",
-                background: "var(--accent)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: 12, fontWeight: 600, color: "white", flexShrink: 0,
-              }}>
-                {user.name[0].toUpperCase()}
-              </div>
-            )}
-            {!collapsed && (
-              <>
-                <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {user.name}
-                  </div>
-                  <div style={{ fontSize: 11, color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {user.email}
-                  </div>
+            {/* Fixed avatar zone */}
+            <span style={{
+              width: SIDEBAR_COLLAPSED_WIDTH,
+              minHeight: 68,
+              flexShrink: 0,
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+            }}>
+              {user.picture ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={user.picture} alt={user.name} style={{ width: 52, height: 52, borderRadius: "50%" }} />
+              ) : (
+                <div style={{
+                  width: 52, height: 52, borderRadius: "50%",
+                  background: "var(--accent)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 12, fontWeight: 600, color: "white",
+                }}>
+                  {user.name[0].toUpperCase()}
                 </div>
-                <span style={{ color: "var(--dimmer)", flexShrink: 0 }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M7 15l5-5 5 5"/>
-                  </svg>
-                </span>
-              </>
-            )}
+              )}
+            </span>
+            {/* Sliding name/email/chevron */}
+            <span style={{ ...slideStyle, flex: 1, minWidth: 0, display: "flex", alignItems: "center", paddingRight: 12 }}>
+              <span style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
+                <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {user.name}
+                </div>
+                <div style={{ fontSize: 11, color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {user.email}
+                </div>
+              </span>
+              <span style={{ color: "var(--dimmer)", flexShrink: 0, marginLeft: 6 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M7 15l5-5 5 5"/>
+                </svg>
+              </span>
+            </span>
           </button>
         </div>
       )}

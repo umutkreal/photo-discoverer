@@ -81,9 +81,9 @@ function TopBar({
 
   return (
     <header style={{
-      height: 48, flexShrink: 0,
+      height: 64, flexShrink: 0,
       display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center",
-      gap: 16, padding: "0 18px",
+      gap: 16, padding: "0 24px",
       background: "var(--bg)",
       borderBottom: "1px solid rgba(255,255,255,0.05)",
     }}>
@@ -93,16 +93,16 @@ function TopBar({
           <button
             onClick={onChangeImage}
             style={{
-              display: "flex", alignItems: "center", gap: 6,
-              padding: "5px 10px", borderRadius: 6, border: 0,
+              display: "flex", alignItems: "center", gap: 8,
+              padding: "7px 14px", borderRadius: 8, border: 0,
               background: "transparent", color: "var(--dimmer)",
-              fontFamily: "var(--body)", fontSize: 12, cursor: "pointer",
+              fontFamily: "var(--body)", fontSize: 14, cursor: "pointer",
               transition: "color 0.12s",
             }}
             onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "var(--text)"; }}
             onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "var(--dimmer)"; }}
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
               <polyline points="21 15 16 10 5 21"/>
             </svg>
@@ -121,9 +121,9 @@ function TopBar({
             <button
               onClick={() => setViewMode(v)}
               style={{
-                padding: "4px 12px", border: 0, background: "transparent",
+                padding: "6px 16px", border: 0, background: "transparent",
                 color: viewMode === v ? "var(--text)" : "var(--dimmer)",
-                fontFamily: "var(--body)", fontSize: 12.5,
+                fontFamily: "var(--body)", fontSize: 15,
                 fontWeight: viewMode === v ? 500 : 400,
                 cursor: "pointer", transition: "color 0.12s",
                 borderBottom: viewMode === v ? "1px solid rgba(255,255,255,0.45)" : "1px solid transparent",
@@ -138,7 +138,7 @@ function TopBar({
       {/* Right — zoom + download + save */}
       <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }}>
         <button onClick={() => setZoom(Math.max(0.25, zoom - 0.1))} style={zoomBtnStyle}>−</button>
-        <span style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--dim)", minWidth: 38, textAlign: "center", fontVariantNumeric: "tabular-nums" }}>
+        <span style={{ fontFamily: "var(--mono)", fontSize: 14, color: "var(--dim)", minWidth: 46, textAlign: "center", fontVariantNumeric: "tabular-nums" }}>
           {Math.round(zoom * 100)}%
         </span>
         <button onClick={() => setZoom(Math.min(3, zoom + 0.1))} style={zoomBtnStyle}>+</button>
@@ -149,24 +149,24 @@ function TopBar({
           onClick={download}
           disabled={!resultImage}
           style={{
-            width: 28, height: 28, border: 0, background: "transparent",
+            width: 36, height: 36, border: 0, background: "transparent",
             color: resultImage ? "var(--dim)" : "var(--dimmer)",
             cursor: resultImage ? "pointer" : "not-allowed",
-            display: "grid", placeItems: "center", borderRadius: 6,
+            display: "grid", placeItems: "center", borderRadius: 8,
             transition: "color 0.12s",
           }}
           onMouseEnter={(e) => { if (resultImage) (e.currentTarget as HTMLButtonElement).style.color = "var(--text)"; }}
           onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = resultImage ? "var(--dim)" : "var(--dimmer)"; }}
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
           </svg>
         </button>
 
         <button style={{
-          height: 28, padding: "0 12px", border: 0, borderRadius: 6,
+          height: 36, padding: "0 18px", border: 0, borderRadius: 8,
           background: "linear-gradient(180deg, #8b92a8 0%, #636a7a 40%, #535a68 100%)",
-          color: "#eef0f6", fontFamily: "var(--body)", fontSize: 12, fontWeight: 600,
+          color: "#eef0f6", fontFamily: "var(--body)", fontSize: 14, fontWeight: 600,
           cursor: "pointer",
           boxShadow: "inset 0 1px 0 rgba(255,255,255,0.15), inset 0 -1px 0 rgba(0,0,0,0.3)",
         }}>
@@ -178,8 +178,8 @@ function TopBar({
 }
 
 const zoomBtnStyle: React.CSSProperties = {
-  width: 26, height: 26, background: "transparent", border: 0, borderRadius: 5,
-  color: "var(--dim)", cursor: "pointer", fontFamily: "var(--mono)", fontSize: 14,
+  width: 34, height: 34, background: "transparent", border: 0, borderRadius: 7,
+  color: "var(--dim)", cursor: "pointer", fontFamily: "var(--mono)", fontSize: 18,
 };
 
 // ─── CompareCanvas ────────────────────────────────────────────────────────────
@@ -456,10 +456,10 @@ function OperationDropdown({ op, selectedId, setSelectedId }: {
                 background: oc(op, 0.14), color: oc(op),
                 display: "grid", placeItems: "center", fontSize: 13,
               }}>{op.icon}</span>
-              <span style={{ fontSize: 13.5, fontWeight: 500 }}>{op.label}</span>
+              <span style={{ fontSize: 15, fontWeight: 500 }}>{op.label}</span>
             </>
           ) : (
-            <span style={{ fontSize: 13.5, color: "var(--dim)" }}>Bir işlem seçin…</span>
+            <span style={{ fontSize: 15, color: "var(--dim)" }}>Bir işlem seçin…</span>
           )}
         </span>
         <svg
@@ -501,8 +501,8 @@ function OperationDropdown({ op, selectedId, setSelectedId }: {
                 display: "grid", placeItems: "center", fontSize: 14,
               }}>{o.icon}</span>
               <span style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ display: "block", fontSize: 13, fontWeight: 500, color: "var(--text)" }}>{o.label}</span>
-                <span style={{ display: "block", fontFamily: "var(--mono)", fontSize: 10, color: "var(--dim)", marginTop: 1 }}>{o.description}</span>
+                <span style={{ display: "block", fontSize: 15, fontWeight: 500, color: "var(--text)" }}>{o.label}</span>
+                <span style={{ display: "block", fontFamily: "var(--mono)", fontSize: 12, color: "var(--dim)", marginTop: 2 }}>{o.description}</span>
               </span>
               {selectedId === o.id && (
                 <span style={{
@@ -526,11 +526,11 @@ function FieldLabel({ children, hint }: { children: React.ReactNode; hint?: stri
   return (
     <div style={{
       display: "flex", alignItems: "baseline", justifyContent: "space-between",
-      fontFamily: "var(--mono)", fontSize: 10, fontWeight: 500,
-      letterSpacing: "0.1em", color: "var(--dim)", textTransform: "uppercase", marginBottom: 8,
+      fontFamily: "var(--mono)", fontSize: 12, fontWeight: 500,
+      letterSpacing: "0.08em", color: "var(--dim)", textTransform: "uppercase", marginBottom: 8,
     }}>
       <span>{children}</span>
-      {hint && <span style={{ fontSize: 9.5, color: "var(--dimmer)", letterSpacing: "0.06em", fontWeight: 400 }}>{hint}</span>}
+      {hint && <span style={{ fontSize: 12, color: "var(--dimmer)", letterSpacing: "0.04em", fontWeight: 400 }}>{hint}</span>}
     </div>
   );
 }
@@ -546,7 +546,7 @@ function ParamPrompt({ op, value, onChange }: { op: Operation; value: string; on
         placeholder={placeholder}
         style={{
           width: "100%", background: "var(--surface)", border: `1px solid ${value ? oc(op, 0.4) : "var(--border)"}`,
-          borderRadius: 8, padding: "10px 12px", fontFamily: "inherit", fontSize: 13,
+          borderRadius: 8, padding: "12px 14px", fontFamily: "inherit", fontSize: 15,
           color: "var(--text)", resize: "none", outline: "none", boxSizing: "border-box",
           lineHeight: 1.5, transition: "border-color 0.15s",
         }}
@@ -564,7 +564,7 @@ function ParamText({ label, placeholder, value, onChange }: { label: string; pla
         onChange={(e) => onChange(e.target.value)}
         style={{
           width: "100%", background: "var(--surface)", border: "1px solid var(--border)",
-          borderRadius: 8, padding: "10px 12px", fontFamily: "inherit", fontSize: 13,
+          borderRadius: 8, padding: "12px 14px", fontFamily: "inherit", fontSize: 15,
           color: "var(--text)", outline: "none", boxSizing: "border-box",
         }}
       />
@@ -642,7 +642,7 @@ function ParamSeg({ op, label, options, value, onChange }: {
                 flex: 1, padding: "6px 7px", borderRadius: 6, border: 0,
                 background: sel ? oc(op, 0.10) : "transparent",
                 color: sel ? oc(op) : "var(--dim)",
-                fontFamily: "var(--mono)", fontSize: 10.5, cursor: "pointer",
+                fontFamily: "var(--mono)", fontSize: 13, cursor: "pointer",
                 transition: "all 0.15s",
               }}
             >{o.label}</button>
@@ -969,7 +969,7 @@ function ParamMask({ op, imageUrl, maskB64, onOpenCanvas, onClearMask }: {
 const miniBtn: React.CSSProperties = {
   padding: "6px 11px", background: "var(--surface-3)",
   border: "1px solid var(--border)", borderRadius: 7,
-  color: "var(--text)", fontFamily: "var(--mono)", fontSize: 10.5,
+  color: "var(--text)", fontFamily: "var(--mono)", fontSize: 13,
   letterSpacing: "0.04em", cursor: "pointer",
 };
 
@@ -999,7 +999,7 @@ function AIEditPanel({
 
   return (
     <aside style={{
-      width: 420, flexShrink: 0, height: "100%",
+      width: 460, flexShrink: 0, height: "100%",
       background: "var(--bg)", borderLeft: "1px solid rgba(255,255,255,0.05)",
       display: "flex", flexDirection: "column", fontFamily: "var(--body)",
     }}>
@@ -1012,13 +1012,13 @@ function AIEditPanel({
 
       {/* Header */}
       <header style={{
-        padding: "14px 20px 12px", borderBottom: "1px solid rgba(255,255,255,0.05)",
+        padding: "18px 24px 16px", borderBottom: "1px solid rgba(255,255,255,0.05)",
         display: "flex", alignItems: "center", justifyContent: "space-between",
       }}>
         {/* Left — active model name */}
         <span style={{
           fontFamily: "'Eightgon', sans-serif",
-          fontSize: 11, letterSpacing: "0.04em",
+          fontSize: 13, letterSpacing: "0.04em",
           color: op ? oc(op, 0.75) : "var(--dimmer)",
           transition: "color 0.2s",
           minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
@@ -1029,14 +1029,14 @@ function AIEditPanel({
 
         {/* Right — timer */}
         {isGenerating && (
-          <span style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--dim)", flexShrink: 0 }}>
+          <span style={{ fontFamily: "var(--mono)", fontSize: 13, color: "var(--dim)", flexShrink: 0 }}>
             {(genMs / 1000).toFixed(1)}s…
           </span>
         )}
       </header>
 
       {/* Body */}
-      <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 16, padding: "18px 20px 22px" }}>
+      <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 20, padding: "22px 24px 26px" }}>
         {/* Operation */}
         <div>
           <OperationDropdown op={op} selectedId={selectedId} setSelectedId={setSelectedId} />
@@ -1111,8 +1111,8 @@ function AIEditPanel({
               display: "grid", placeItems: "center", fontSize: 14,
             }}>{op.icon}</span>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>Parametre gerekmez</div>
-              <div style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--dim)", marginTop: 3 }}>{op.description}.</div>
+              <div style={{ fontSize: 15, fontWeight: 500, color: "var(--text)" }}>Parametre gerekmez</div>
+              <div style={{ fontFamily: "var(--mono)", fontSize: 13, color: "var(--dim)", marginTop: 3 }}>{op.description}.</div>
             </div>
           </div>
         )}
@@ -1122,9 +1122,9 @@ function AIEditPanel({
           onClick={onSubmit}
           disabled={!op || isGenerating || isQueued}
           style={{
-            width: "100%", height: 46, borderRadius: 11,
+            width: "100%", height: 54, borderRadius: 12,
             border: "1px solid rgba(255,255,255,0.10)",
-            fontFamily: "var(--body)", fontSize: 13.5, fontWeight: 600,
+            fontFamily: "var(--body)", fontSize: 16, fontWeight: 600,
             cursor: !op || isGenerating || isQueued ? "not-allowed" : "pointer",
             display: "flex", alignItems: "center",
             justifyContent: "center", gap: 10, marginTop: 4,
