@@ -16,14 +16,6 @@ const Logo = () => (
   </svg>
 );
 
-const IPanel = () => (
-  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-    <rect x="3" y="3" width="7" height="7" rx="1"/>
-    <rect x="14" y="3" width="7" height="7" rx="1"/>
-    <rect x="3" y="14" width="7" height="7" rx="1"/>
-    <rect x="14" y="14" width="7" height="7" rx="1"/>
-  </svg>
-);
 
 const ISearch = () => (
   <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -53,17 +45,11 @@ const IEdit = () => (
   </svg>
 );
 
-const IIntegrations = () => (
-  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-  </svg>
-);
 
-const ISettings = () => (
+const IUser = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-    <circle cx="12" cy="12" r="3"/>
-    <path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/>
+    <circle cx="12" cy="8" r="4"/>
+    <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
   </svg>
 );
 
@@ -92,12 +78,10 @@ const IChevron = () => (
 // ─── Nav items ────────────────────────────────────────────────
 
 const NAV = [
-  { href: "/dashboard",             label: "Panel",         Icon: IPanel         },
-  { href: "/search",                label: "Ara",           Icon: ISearch        },
-  { href: "/edit",                  label: "AI Düzenle",    Icon: IEdit          },
-  { href: "/albums",                label: "Albümler",      Icon: IAlbums        },
-  { href: "/duplicates",            label: "Yinelenenler",  Icon: IDuplicates    },
-  { href: "/settings/integrations", label: "Entegrasyonlar",Icon: IIntegrations  },
+  { href: "/search",     label: "Ara",          Icon: ISearch     },
+  { href: "/edit",       label: "AI Düzenle",   Icon: IEdit       },
+  { href: "/albums",     label: "Albümler",     Icon: IAlbums     },
+  { href: "/duplicates", label: "Yinelenenler", Icon: IDuplicates },
 ];
 
 type MenuItem =
@@ -105,11 +89,10 @@ type MenuItem =
   | { label: string; Icon: () => React.ReactElement; shortcut?: string; arrow?: boolean; href?: string; action?: string; danger?: boolean };
 
 const MENU: MenuItem[] = [
-  { label: "Entegrasyonlar", Icon: IIntegrations, href: "/settings/integrations" },
-  { label: "Ayarlar",        Icon: ISettings,     href: "/settings/integrations" },
-  { label: "Yardım al",      Icon: IHelp,         href: "#" },
+  { label: "Hesabım",   Icon: IUser,    href: "/account" },
+  { label: "Yardım al", Icon: IHelp,   href: "#" },
   { divider: true },
-  { label: "Çıkış yap",      Icon: ILogout,       action: "logout", danger: true },
+  { label: "Çıkış yap", Icon: ILogout, action: "logout", danger: true },
 ];
 
 // ─── Constants ───────────────────────────────────────────────
@@ -209,7 +192,7 @@ export default function Sidebar() {
       {/* Nav */}
       <nav style={{ flex: 1, padding: "8px", display: "flex", flexDirection: "column", gap: 1 }}>
         {NAV.map(({ href, label, Icon }) => {
-          const active = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
+          const active = pathname === href || pathname.startsWith(href);
           return (
             <Link
               key={href}

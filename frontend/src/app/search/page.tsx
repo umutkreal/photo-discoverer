@@ -228,7 +228,7 @@ function AddToAlbumButton({ photo }: { photo: PhotoResult }) {
     <div ref={wrapperRef} style={{ position: "relative" }} onClick={(e) => e.stopPropagation()}>
       <button onClick={handleOpen} style={{
         padding: "4px 10px", borderRadius: 6,
-        background: open ? "var(--accent-soft)" : "var(--accent)",
+        background: open ? "var(--accent-soft)" : "#111",
         border: "1px solid transparent",
         color: "#fff", fontSize: "0.72rem", fontFamily: "var(--font-body)",
         cursor: "pointer", whiteSpace: "nowrap",

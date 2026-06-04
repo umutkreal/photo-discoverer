@@ -376,7 +376,8 @@ export default function DuplicatesPage() {
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
       <Sidebar />
-      <main style={{ flex: 1, marginLeft: "var(--sidebar-w)", transition: "margin-left 0.2s ease", minWidth: 0, padding: "40px 40px 60px", maxWidth: 900 }}>
+      <main style={{ flex: 1, marginLeft: "var(--sidebar-w)", transition: "margin-left 0.2s ease", minWidth: 0, padding: "40px 24px 60px", display: "flex", flexDirection: "column", alignItems: "center" }}>
+        <div style={{ width: "100%", maxWidth: 900 }}>
         {/* Header */}
         <div className="animate-fade-in" style={{ marginBottom: 28 }}>
           <h1 style={{ fontFamily: "var(--font-display)", fontSize: "2.2rem", fontWeight: 800, letterSpacing: "-0.03em", color: "var(--text)", marginBottom: 6 }}>
@@ -500,6 +501,7 @@ export default function DuplicatesPage() {
             <p style={{ fontFamily: "var(--font-body)", color: "var(--text-muted)", fontSize: "0.88rem" }}>Yukarıdaki "Tara" butonuna bas.</p>
           </div>
         )}
+        </div>
       </main>
     </div>
   );
