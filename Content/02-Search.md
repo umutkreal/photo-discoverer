@@ -58,9 +58,10 @@ Parametreler: `q`, `limit`, `offset`, `source`, `year_from`, `year_to`, `camera_
 
 Akış:
 1. `metin_vektore_cevir(q)` → 512d vektör
-2. `qdrant_client.query_points(collection, query_vector, limit=48)`
-3. Python tarafında filtre (source / yıl / kamera)
-4. `offset : offset+limit` ile sayfalama
+2. Dinamik `fetch_limit` hesapla: EXIF filtresi varsa 500, source filtresi varsa `(limit+offset)*4`, filtresizse `limit+offset`
+3. `qdrant_client.query_points(collection, query_vector, limit=fetch_limit)`
+4. Python tarafında filtre (source / yıl / kamera)
+5. `offset : offset+limit` ile sayfalama
 
 **`GET /stats`**
 EXIF kapsamını döner: toplam fotoğraf sayısı, EXIF'li / GPS'li sayılar, mevcut kamera markaları.
@@ -108,7 +109,7 @@ Provider-agnostik thumbnail proxy. `file_id` ve `source` parametresi alır, ilgi
 Kullanıcı "sunset" yazar → searchApi.search("sunset")
   → GET /search?q=sunset&limit=12
   → metin_vektore_cevir("sunset") → 512d vektör
-  → Qdrant cosine similarity → 48 sonuç
+  → Qdrant cosine similarity → fetch_limit (dinamik) sonuç
   → Python filtresi + sayfalama → 12 sonuç
   → Frontend grid'de gösterim
   → Thumbnail'ler GET /thumbnail?file_id=...&source=... proxy'si ile

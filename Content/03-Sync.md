@@ -7,7 +7,7 @@
 
 ## `backend/sync.py`
 
-### `index_all(qdrant_client, col_name, email, all_credentials, limit, folder_id)`
+### `index_all(qdrant_client, col_name, user_id, all_credentials, limit, folder_id)`
 Tüm bağlı provider'lar için tam indeksleme yapar.
 
 **Adımlar:**
@@ -21,7 +21,7 @@ Tüm bağlı provider'lar için tam indeksleme yapar.
 
 > T_start sonradan alınmasının nedeni: indeksleme sırasında oluşan değişiklik olaylarını bir sonraki delta sync'in yakalamaması için.
 
-### `delta_sync(qdrant_client, col_name, email, all_credentials)`
+### `delta_sync(qdrant_client, col_name, user_id, all_credentials)`
 Yalnızca son sync'ten bu yana değişen fotoğrafları günceller.
 
 **Adımlar:**

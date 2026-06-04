@@ -8,17 +8,19 @@ ALGORITHM = "HS256"
 EXPIRE_MINUTES = 60 * 24  # 24 saat
 
 
-def jwt_olustur(data: dict) -> str:
-    """Kullanıcı bilgilerinden JWT token üretir."""
-    payload = data.copy()
-    payload["exp"] = datetime.now(timezone.utc) + timedelta(minutes=EXPIRE_MINUTES)
+def jwt_olustur(user_id: str) -> str:
+    """user_id'den JWT token üretir."""
+    payload = {
+        "sub": user_id,
+        "exp": datetime.now(timezone.utc) + timedelta(minutes=EXPIRE_MINUTES),
+    }
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
-def jwt_dogrula(token: str) -> dict | None:
-    """JWT token'ı doğrular, geçerliyse payload döner."""
+def jwt_dogrula(token: str) -> str | None:
+    """JWT token'ı doğrular, geçerliyse user_id döner."""
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        return payload
+        return payload.get("sub")
     except JWTError:
         return None

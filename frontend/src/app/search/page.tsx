@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Sidebar, { SIDEBAR_WIDTH } from "@/components/common/Sidebar";
-import { searchApi, albumApi, thumbnailUrl, SOURCE_CONFIG } from "@/lib/api";
+import { searchApi, albumApi, photoApi, thumbnailUrl, SOURCE_CONFIG } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import type { PhotoResult, SourceKey, SearchFilters, StatsResponse, Album } from "@/lib/api";
 
@@ -44,6 +44,7 @@ const SOURCES: { key: SourceKey | null; label: string }[] = [
   { key: null,       label: "Tümü"         },
   { key: "gdrive",   label: "Google Drive" },
   { key: "dropbox",  label: "Dropbox"      },
+  { key: "pcloud",   label: "pCloud"       },
   { key: "onedrive", label: "OneDrive"     },
 ];
 
@@ -310,12 +311,31 @@ function PhotoCard({ photo, index, onClick }: { photo: PhotoResult; index: numbe
 
 // ─── Photo Modal ──────────────────────────────────────────────
 
-function PhotoModal({ photo, onClose, onEditClick }: { photo: PhotoResult; onClose: () => void; onEditClick: () => void }) {
+function PhotoModal({ photo, onClose, onEditClick, onDelete }: { photo: PhotoResult; onClose: () => void; onEditClick: () => void; onDelete: (file_id: string) => void }) {
+  const [deleteState, setDeleteState] = useState<"idle" | "confirm" | "deleting" | "error">("idle");
+
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (deleteState === "confirm") { setDeleteState("idle"); return; }
+        onClose();
+      }
+    };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [onClose]);
+  }, [onClose, deleteState]);
+
+  const handleDelete = async () => {
+    setDeleteState("deleting");
+    try {
+      await photoApi.delete(photo.source, photo.file_id);
+      onDelete(photo.file_id);
+      window.location.reload();
+    } catch {
+      setDeleteState("error");
+      setTimeout(() => setDeleteState("idle"), 2500);
+    }
+  };
 
   const cfg = SOURCE_CONFIG[photo.source];
   const imgSrc = thumbnailUrl(photo.file_id, photo.source);
@@ -337,7 +357,72 @@ function PhotoModal({ photo, onClose, onEditClick }: { photo: PhotoResult; onClo
       <div onClick={(e) => e.stopPropagation()} style={{
         background: "var(--surface)", border: "1px solid var(--border)",
         borderRadius: 20, maxWidth: 640, width: "100%", overflow: "hidden",
+        position: "relative",
       }}>
+
+        {/* ─── Onay overlay ─── */}
+        {(deleteState === "confirm" || deleteState === "deleting") && (
+          <div style={{
+            position: "absolute", inset: 0, zIndex: 10,
+            background: "rgba(10,10,18,0.82)", backdropFilter: "blur(6px)",
+            borderRadius: 20,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            animation: "fadeIn 0.15s ease-out",
+          }}>
+            <div style={{
+              background: "var(--surface)", border: "1px solid rgba(248,113,113,0.35)",
+              borderRadius: 16, padding: "28px 32px", maxWidth: 360, width: "90%",
+              textAlign: "center", boxShadow: "0 16px 48px rgba(0,0,0,0.6)",
+            }}>
+              <div style={{
+                width: 48, height: 48, borderRadius: "50%", margin: "0 auto 16px",
+                background: "rgba(248,113,113,0.12)", display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke="var(--error)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </div>
+              <p style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "1rem", color: "var(--text)", marginBottom: 8 }}>
+                Fotoğrafı sil?
+              </p>
+              <p style={{ fontFamily: "var(--font-body)", fontSize: "0.85rem", color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 24 }}>
+                Bu fotoğrafı silmek istediğinizden emin misiniz?<br />Bu işlem geri alınamaz.
+              </p>
+              <div style={{ display: "flex", gap: 10 }}>
+                <button
+                  onClick={() => setDeleteState("idle")}
+                  disabled={deleteState === "deleting"}
+                  style={{
+                    flex: 1, padding: "10px 0", borderRadius: 10,
+                    background: "var(--surface-2)", border: "1px solid var(--border)",
+                    color: "var(--text-muted)", fontFamily: "var(--font-display)",
+                    fontWeight: 600, fontSize: "0.9rem",
+                    cursor: deleteState === "deleting" ? "not-allowed" : "pointer",
+                  }}
+                >
+                  İptal
+                </button>
+                <button
+                  onClick={handleDelete}
+                  disabled={deleteState === "deleting"}
+                  style={{
+                    flex: 1, padding: "10px 0", borderRadius: 10,
+                    background: "rgba(248,113,113,0.15)", border: "1px solid rgba(248,113,113,0.6)",
+                    color: "var(--error)", fontFamily: "var(--font-display)",
+                    fontWeight: 600, fontSize: "0.9rem",
+                    cursor: deleteState === "deleting" ? "not-allowed" : "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
+                  }}
+                >
+                  {deleteState === "deleting" && (
+                    <span style={{ width: 14, height: 14, border: "2px solid rgba(248,113,113,0.3)", borderTop: "2px solid var(--error)", borderRadius: "50%", animation: "spin-slow 0.7s linear infinite" }} />
+                  )}
+                  {deleteState === "deleting" ? "Siliniyor…" : "Evet, Sil"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         <div style={{ position: "relative", background: "var(--surface-2)" }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={imgSrc} alt={photo.filename}
@@ -399,7 +484,20 @@ function PhotoModal({ photo, onClose, onEditClick }: { photo: PhotoResult; onClo
             </div>
           )}
 
+          {deleteState === "error" && (
+            <p style={{ fontFamily: "var(--font-body)", fontSize: "0.82rem", color: "var(--error)", marginBottom: 10, textAlign: "center" }}>
+              Silinemedi — tekrar dene.
+            </p>
+          )}
           <div style={{ display: "flex", gap: 10 }}>
+            <button onClick={() => setDeleteState("confirm")} style={{
+              padding: "10px 16px", borderRadius: 10,
+              background: "transparent", border: "1px solid rgba(248,113,113,0.5)",
+              color: "var(--error)", fontFamily: "var(--font-display)",
+              fontWeight: 600, fontSize: "0.9rem", cursor: "pointer", whiteSpace: "nowrap",
+            }}>
+              Sil
+            </button>
             <a href={photo.drive_url} target="_blank" rel="noopener noreferrer" style={{
               flex: 1, padding: "10px 0", borderRadius: 10,
               background: cfg.color, color: "white",
@@ -713,6 +811,10 @@ export default function SearchPage() {
           onEditClick={() => {
             const p = new URLSearchParams({ file_id: selectedPhoto.file_id, source: selectedPhoto.source });
             router.push(`/edit?${p}`);
+          }}
+          onDelete={(file_id) => {
+            setResults((prev) => prev.filter((p) => p.file_id !== file_id));
+            setSelectedPhoto(null);
           }}
         />
       )}

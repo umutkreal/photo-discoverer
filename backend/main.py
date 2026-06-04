@@ -236,16 +236,19 @@ def pcloud_login(user: User = Depends(aktif_kullanici)):
 
 @app.get("/auth/pcloud/callback")
 def pcloud_callback(request: Request):
+    print(f"[pCloud callback] params={dict(request.query_params)}")
     error = request.query_params.get("error")
     if error:
         return RedirectResponse(f"{FRONTEND_INTEGRATIONS}?error={error}")
 
-    code  = request.query_params.get("code")
-    state = request.query_params.get("state")
+    code     = request.query_params.get("code")
+    state    = request.query_params.get("state")
+    hostname = request.query_params.get("hostname", "api.pcloud.com")
 
     state_store = oauth_state_store_getir()
     payload = state_store.tuket(state)
     if not payload:
+        print(f"[pCloud callback] state not found: {state}")
         return RedirectResponse(f"{FRONTEND_INTEGRATIONS}?error=invalid_state")
 
     email = payload["email"]
@@ -254,8 +257,9 @@ def pcloud_callback(request: Request):
         return RedirectResponse(f"{FRONTEND_INTEGRATIONS}?error=user_not_found")
 
     try:
-        token_data = pcloud_token_exchange(code)
-    except RuntimeError:
+        token_data = pcloud_token_exchange(code, hostname=hostname)
+    except Exception as e:
+        print(f"[pCloud callback] token exchange exception: {e}")
         return RedirectResponse(f"{FRONTEND_INTEGRATIONS}?error=token_exchange_failed")
 
     token_store_getir().kaydet(db_user.user_id, "pcloud", token_data)
@@ -827,8 +831,8 @@ def thumbnail(
             raise HTTPException(status_code=401, detail="pCloud oturumu bulunamadı")
 
         try:
-            provider = PCloudProvider(creds["access_token"])
-            link_data = provider._get("/getthumb", fileid=int(file_id), size="256x256", crop=0)
+            provider = PCloudProvider(creds["access_token"], creds.get("hostname", "api.pcloud.com"))
+            link_data = provider._get("/getthumblink", fileid=int(file_id), size="256x256", crop=0)
             download_url = f"https://{link_data['hosts'][0]}{link_data['path']}"
             return RedirectResponse(url=download_url, status_code=302)
         except Exception as e:

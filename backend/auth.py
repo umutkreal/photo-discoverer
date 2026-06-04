@@ -90,25 +90,30 @@ def pcloud_auth_url_olustur(state: str) -> str:
     return PCLOUD_AUTH_URL + params
 
 
-def pcloud_token_exchange(code: str) -> dict:
-    """Yalnızca token exchange yapar. State doğrulaması caller tarafından yapılmış olmalı."""
-    resp = httpx.post(
-        "https://api.pcloud.com/oauth2_token",
-        data={
+def pcloud_token_exchange(code: str, hostname: str = "api.pcloud.com") -> dict:
+    """Yalnızca token exchange yapar. State doğrulaması caller tarafından yapılmış olmalı.
+    pCloud, token exchange için GET kullanır; redirect_uri gönderilmez.
+    EU hesaplar için hostname='eapi.pcloud.com' geçilmeli."""
+    resp = httpx.get(
+        f"https://{hostname}/oauth2_token",
+        params={
             "client_id":     PCLOUD_CLIENT_ID,
             "client_secret": PCLOUD_CLIENT_SECRET,
             "code":          code,
-            "redirect_uri":  PCLOUD_REDIRECT_URI,
         },
         timeout=15,
     )
     resp.raise_for_status()
     data = resp.json()
+    print(f"[pCloud token exchange] status={resp.status_code} body={data}")
 
     if data.get("result", 0) != 0:
         raise RuntimeError(f"pCloud token hatası: {data.get('error', 'bilinmeyen')}")
 
-    return {"access_token": data["access_token"]}
+    return {
+        "access_token": data["access_token"],
+        "hostname":     data.get("hostname", hostname),
+    }
 
 
 # ─── OneDrive OAuth (MSAL) ────────────────────────────────────

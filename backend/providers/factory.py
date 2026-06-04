@@ -14,6 +14,9 @@ def provider_getir(source: str, credentials) -> BaseProvider:
         case "onedrive":
             return OneDriveProvider(credentials["access_token"])
         case "pcloud":
-            return PCloudProvider(credentials["access_token"])
+            return PCloudProvider(
+                credentials["access_token"],
+                hostname=credentials.get("hostname", "api.pcloud.com"),
+            )
         case _:
             raise ValueError(f"Bilinmeyen provider: {source}")

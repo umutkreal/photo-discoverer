@@ -1,6 +1,7 @@
 token.json
 credentials.json
 .env
+*.db
 .env.local
 .env.*.local
 .venv/

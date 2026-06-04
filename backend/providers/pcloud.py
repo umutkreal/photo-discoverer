@@ -1,9 +1,16 @@
+import os
 import httpx
 from PIL import Image
 import io
 from .base import BaseProvider
 
-PCLOUD_URL = "https://api.pcloud.com"
+PCLOUD_URL = os.getenv("PCLOUD_API_URL", "https://api.pcloud.com")
+
+
+class PCloudAuthError(Exception):
+    def __init__(self, code: int, message: str):
+        super().__init__(f"pCloud hata {code}: {message}")
+        self.code = code
 
 
 class PCloudProvider(BaseProvider):
@@ -15,48 +22,55 @@ class PCloudProvider(BaseProvider):
 
     source_key = "pcloud"
 
-    def __init__(self, access_token: str):
+    def __init__(self, access_token: str, hostname: str = "api.pcloud.com"):
         self._token = access_token
+        self._base_url = f"https://{hostname}"
 
     def _get(self, endpoint: str, **params) -> dict:
-        params["access_token"] = self._token
-        resp = httpx.get(f"{PCLOUD_URL}{endpoint}", params=params, timeout=30)
+        headers = {"Authorization": f"Bearer {self._token}"}
+        resp = httpx.get(f"{self._base_url}{endpoint}", params=params, headers=headers, timeout=30)
         resp.raise_for_status()
         data = resp.json()
         result_code = data.get("result", 0)
         if result_code != 0:
+            # 1000 = login required (1xxx: login errors)
+            # 2094 = invalid access_token value provided (2xxx: user/data errors, but this
+            #        specific code means the token itself is bad — re-auth is the only fix)
+            if result_code in (1000, 2094):
+                raise PCloudAuthError(result_code, data.get("error", "bilinmeyen hata"))
             raise RuntimeError(f"pCloud hata {result_code}: {data.get('error', 'bilinmeyen hata')}")
         return data
 
-    def _collect_files(self, metadata: dict, out: list) -> None:
-        """Klasör ağacını recursive gezer, fotoğraf dosyalarını toplar."""
-        for item in metadata.get("contents", []):
+    def _list_folder_recursive(self, folder_id: int, out: list, path_prefix: str) -> None:
+        """EU endpoint recursive parametresini desteklemez; her alt klasör için ayrı API çağrısı yapar."""
+        resp = self._get("/listfolder", folderid=folder_id)
+        for item in resp.get("metadata", {}).get("contents", []):
             if item.get("isfolder"):
-                self._collect_files(item, out)
+                sub_path = f"{path_prefix}/{item['name']}".lstrip("/")
+                self._list_folder_recursive(item["folderid"], out, sub_path)
                 continue
             ct = item.get("contenttype", "")
             name = item.get("name", "")
             if not (ct.startswith("image/") or name.lower().endswith((".jpg", ".jpeg", ".png", ".heic"))):
                 continue
-            path = item.get("path", "")
-            folder = "/".join(path.split("/")[:-1]) if path else ""
+            file_id = item.get("fileid") or item.get("id", "")
+            folder_path = f"/{path_prefix}" if path_prefix else "/"
             out.append({
-                "id":          str(item["id"]),
+                "id":          str(file_id),
                 "name":        name,
                 "size":        item.get("size", 0),
-                "folder_path": folder,
+                "folder_path": folder_path,
                 "drive_url":   (
                     f"https://my.pcloud.com/#page=filemanager"
-                    f"&folder={item.get('parentfolderid', '')}&file={item['id']}"
+                    f"&folder={item.get('parentfolderid', '')}&file={file_id}"
                 ),
                 "exif": {},
             })
 
     def fotograflari_listele(self, klasor_id=None, limit=100):
         folder_id = int(klasor_id) if klasor_id else 0
-        resp = self._get("/listfolder", folderid=folder_id, recursive=1, noshares=0)
         files: list = []
-        self._collect_files(resp.get("metadata", {}), files)
+        self._list_folder_recursive(folder_id, files, "")
         return files[:limit]
 
     def foto_indir(self, file_id: str) -> Image.Image:
@@ -76,21 +90,21 @@ class PCloudProvider(BaseProvider):
             meta = entry.get("metadata", {})
             if meta.get("isfolder"):
                 continue
+            file_id = meta.get("fileid") or meta.get("id", "")
             if event == "delete":
-                silinenler.append(str(meta.get("id", "")))
+                if file_id:
+                    silinenler.append(str(file_id))
             elif event in ("create", "modify"):
                 ct = meta.get("contenttype", "")
                 name = meta.get("name", "")
                 if not (ct.startswith("image/") or name.lower().endswith((".jpg", ".jpeg", ".png", ".heic"))):
                     continue
-                path = meta.get("path", "")
-                folder = "/".join(path.split("/")[:-1]) if path else ""
                 eklenenler.append({
-                    "id":          str(meta["id"]),
+                    "id":          str(file_id),
                     "name":        name,
                     "size":        meta.get("size", 0),
-                    "folder_path": folder,
-                    "drive_url":   f"https://my.pcloud.com/#page=filemanager&file={meta['id']}",
+                    "folder_path": "",
+                    "drive_url":   f"https://my.pcloud.com/#page=filemanager&file={file_id}",
                     "exif":        {},
                 })
 
@@ -115,8 +129,9 @@ class PCloudProvider(BaseProvider):
         folder_id = folder_resp.get("metadata", {}).get("folderid", 0)
 
         upload_resp = httpx.post(
-            f"{PCLOUD_URL}/uploadfile",
-            params={"access_token": self._token, "folderid": folder_id, "filename": filename},
+            f"{self._base_url}/uploadfile",
+            params={"folderid": folder_id, "filename": filename},
+            headers={"Authorization": f"Bearer {self._token}"},
             files={"file": (filename, image_bytes, "image/jpeg")},
             timeout=60,
         )

@@ -13,7 +13,7 @@ Sanal albüm sistemi: fotoğraflar cloud'da kalır, yalnızca `source + file_id`
 ```sql
 albums (
   album_id   TEXT PRIMARY KEY,   -- UUID
-  owner      TEXT,               -- kullanıcı email
+  owner      TEXT,               -- user_id (UUID v4)
   name       TEXT,
   created_at TEXT
 )
@@ -43,6 +43,7 @@ album_photos (
 | `album_sil(album_id, owner)` | Albüm + fotoğraf referansları siler (CASCADE) |
 | `fotograf_ekle(album_id, source, file_id, ...)` | Fotoğraf referansı ekler |
 | `fotograf_cikar(album_id, source, file_id)` | Referansı kaldırır |
+| `fotograf_cikar_global(source, file_id)` | Tüm albümlerden belirtilen fotoğrafı kaldırır (fotoğraf silindiğinde) |
 
 **Not:** Fotoğraflar cloud'da kalır, silme işlemi yalnızca albüm referansını kaldırır.
 
@@ -58,7 +59,7 @@ album_photos (
 | `/albums/{album_id}` | PATCH | Albüm adını değiştirir |
 | `/albums/{album_id}` | DELETE | Albümü siler |
 | `/albums/{album_id}/photos` | POST | Fotoğraf ekler |
-| `/albums/{album_id}/photos/{source}/{file_id}` | DELETE | Fotoğraf referansını kaldırır |
+| `/albums/{album_id}/photos?source=X&file_id=Y` | DELETE | Fotoğraf referansını kaldırır (query params) |
 
 ---
 

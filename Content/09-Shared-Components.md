@@ -123,7 +123,7 @@ BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 - `rename(id, name)` → `PATCH /albums/{id}`
 - `delete(id)` → `DELETE /albums/{id}`
 - `addPhoto(album_id, photo)` → `POST /albums/{id}/photos`
-- `removePhoto(album_id, source, file_id)` → `DELETE /albums/{id}/photos/{source}/{file_id}`
+- `removePhoto(album_id, source, file_id)` → `DELETE /albums/{id}/photos?source=X&file_id=Y` (query params)
 
 **`editApi`**
 - `edit(body: NewEditRequest)` → `POST /edit`

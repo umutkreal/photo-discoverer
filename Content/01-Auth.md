@@ -12,7 +12,7 @@ Dört bulut sağlayıcı için OAuth akışlarını yönetir.
 
 **Google Drive akışı:**
 - `oauth_flow_init()` — `google-auth-oauthlib` ile authorization URL üretir. Scopes: `openid`, `drive`, `userinfo.email`, `userinfo.profile`
-- `oauth_flow_fetch_token(authorization_response_url)` — kodu access token ile değiştirir, Credentials nesnesi döner
+- `oauth_flow_fetch_token(state, code, code_verifier)` — kodu access token ile değiştirir, Credentials nesnesi döner
 - `get_user_info(credentials)` — Google OAuth2 API'den `email / name / picture` alır
 
 **Diğer sağlayıcılar (Dropbox, pCloud, OneDrive):**
@@ -26,17 +26,20 @@ Dört bulut sağlayıcı için OAuth akışlarını yönetir.
 - `jwt_dogrula(token: str) → dict | None` — payload döner ya da None
 
 ### `backend/token_store.py`
-Sunucu bellekte sağlayıcı kimlik bilgilerini ve delta-sync checkpoint'lerini tutar.
+Sağlayıcı kimlik bilgilerini ve delta-sync checkpoint'lerini **SQLite** (`app.db`) tabanlı `SqliteTokenStore` ile saklar. Sunucu yeniden başlasa da tokenlar korunur.
 
 | Fonksiyon | Açıklama |
 |-----------|----------|
-| `kaydet(email, source, credentials)` | Provider tokenlarını saklar |
-| `getir(email, source)` | Tek provider için token getirir |
-| `getir_tum(email)` | Tüm bağlı providerları döner |
-| `sil(email, source)` | Bağlantıyı keser |
+| `kaydet(user_id, source, credentials)` | Provider tokenlarını saklar |
+| `getir(user_id, source)` | Tek provider için token getirir |
+| `getir_tum(user_id)` | Tüm bağlı providerları döner |
+| `sil(user_id, source)` | Bağlantıyı keser |
 | `page_token_kaydet/getir/sil` | Delta sync checkpoint yönetimi |
 
-> **Kısıt:** Sunucu yeniden başlayınca tüm tokenlar kaybolur. Redis'e geçiş planlandı (Phase 5B).
+### `backend/token_refresh.py`
+OneDrive token yenileme yardımcısı (Google credentials google-auth tarafından otomatik yenilenir).
+- `onedrive_token_yenile(user_id, refresh_token)` — refresh token ile yeni access token alır, SQLite'a yazar
+- `onedrive_credentials_hazirla(user_id)` — OneDrive credentials'larını döner
 
 ---
 
@@ -46,7 +49,7 @@ Sunucu bellekte sağlayıcı kimlik bilgilerini ve delta-sync checkpoint'lerini 
 |----------|----------|
 | `GET /auth/login` | Google auth URL döner |
 | `GET /auth/callback` | Google kodu token'a çevirir, JWT + user info URL'e eklenerek frontend'e yönlendirir |
-| `GET /auth/me` | JWT doğrular, user dict döner |
+| `GET /users/me` | JWT doğrular, User nesnesi döner |
 | `GET /auth/dropbox/login` | Dropbox auth URL |
 | `GET /auth/dropbox/callback` | Dropbox token exchange |
 | `GET /auth/pcloud/login` | pCloud auth URL |
@@ -57,7 +60,8 @@ Sunucu bellekte sağlayıcı kimlik bilgilerini ve delta-sync checkpoint'lerini 
 
 ### `backend/dependencies.py`
 FastAPI dependency injection:
-- `aktif_kullanici()` — Bearer token'dan JWT doğrular, user dict döner; geçersizse 401
+- `aktif_kullanici_id()` — Bearer token'dan JWT doğrular, `user_id` string döner; geçersizse 401
+- `aktif_kullanici()` — `user_id`'den DB'ye sorgular, `User` nesnesi döner; geçersizse 401
 - `kullanici_tum_credentials()` — En az bir sağlayıcı bağlı değilse hata; bağlı provider credentials'larını döner
 
 ---

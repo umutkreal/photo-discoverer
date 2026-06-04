@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import Sidebar, { SIDEBAR_WIDTH } from "@/components/common/Sidebar";
-import { albumApi, thumbnailUrl, SOURCE_CONFIG } from "@/lib/api";
+import { albumApi, photoApi, thumbnailUrl, SOURCE_CONFIG } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import type { Album, AlbumPhoto, SourceKey } from "@/lib/api";
 
@@ -13,27 +13,44 @@ function SourceDot({ source }: { source: SourceKey }) {
   return <div style={{ width: 10, height: 10, borderRadius: "50%", background: color, border: "1.5px solid rgba(0,0,0,0.4)", flexShrink: 0 }} title={SOURCE_CONFIG[source]?.label} />;
 }
 
-function Lightbox({ photos, initialIndex, onClose, onRemove }: {
+function Lightbox({ photos, initialIndex, onClose, onRemove, onDeleteFromCloud }: {
   photos: AlbumPhoto[]; initialIndex: number;
   onClose: () => void; onRemove: (p: AlbumPhoto) => void;
+  onDeleteFromCloud: (p: AlbumPhoto) => Promise<void>;
 }) {
   const [idx, setIdx] = useState(initialIndex);
+  const [deleteState, setDeleteState] = useState<"idle" | "confirm" | "deleting">("idle");
   const stripRef      = useRef<HTMLDivElement>(null);
   const photo         = photos[idx];
   const cfg           = photo ? SOURCE_CONFIG[photo.source] : null;
+
+  useEffect(() => { setDeleteState("idle"); }, [idx]);
+
+  const handleDelete = async () => {
+    if (!photo) return;
+    setDeleteState("deleting");
+    try {
+      await onDeleteFromCloud(photo);
+    } catch {
+      setDeleteState("idle");
+    }
+  };
 
   const prev = useCallback(() => setIdx((i) => Math.max(0, i - 1)), []);
   const next = useCallback(() => setIdx((i) => Math.min(photos.length - 1, i + 1)), [photos.length]);
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-      if (e.key === "ArrowLeft") prev();
-      if (e.key === "ArrowRight") next();
+      if (e.key === "Escape") {
+        if (deleteState === "confirm") { setDeleteState("idle"); return; }
+        onClose();
+      }
+      if (e.key === "ArrowLeft" && deleteState === "idle") prev();
+      if (e.key === "ArrowRight" && deleteState === "idle") next();
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, [onClose, prev, next]);
+  }, [onClose, prev, next, deleteState]);
 
   useEffect(() => {
     const strip = stripRef.current;
@@ -49,6 +66,70 @@ function Lightbox({ photos, initialIndex, onClose, onRemove }: {
       position: "fixed", inset: 0, background: "rgba(0,0,0,0.95)", backdropFilter: "blur(20px)",
       zIndex: 100, display: "flex", flexDirection: "column", animation: "fadeIn 0.2s ease-out",
     }}>
+
+      {/* ─── Onay overlay ─── */}
+      {(deleteState === "confirm" || deleteState === "deleting") && (
+        <div onClick={(e) => e.stopPropagation()} style={{
+          position: "absolute", inset: 0, zIndex: 10,
+          background: "rgba(10,10,18,0.82)", backdropFilter: "blur(6px)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          animation: "fadeIn 0.15s ease-out",
+        }}>
+          <div style={{
+            background: "var(--surface)", border: "1px solid rgba(248,113,113,0.35)",
+            borderRadius: 16, padding: "28px 32px", maxWidth: 360, width: "90%",
+            textAlign: "center", boxShadow: "0 16px 48px rgba(0,0,0,0.6)",
+          }}>
+            <div style={{
+              width: 48, height: 48, borderRadius: "50%", margin: "0 auto 16px",
+              background: "rgba(248,113,113,0.12)", display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                <path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke="var(--error)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            <p style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "1rem", color: "var(--text)", marginBottom: 8 }}>
+              Fotoğrafı sil?
+            </p>
+            <p style={{ fontFamily: "var(--font-body)", fontSize: "0.85rem", color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 24 }}>
+              Bu fotoğrafı silmek istediğinizden emin misiniz?<br />Bu işlem geri alınamaz.
+            </p>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button
+                onClick={() => setDeleteState("idle")}
+                disabled={deleteState === "deleting"}
+                style={{
+                  flex: 1, padding: "10px 0", borderRadius: 10,
+                  background: "var(--surface-2)", border: "1px solid var(--border)",
+                  color: "var(--text-muted)", fontFamily: "var(--font-display)",
+                  fontWeight: 600, fontSize: "0.9rem",
+                  cursor: deleteState === "deleting" ? "not-allowed" : "pointer",
+                }}
+              >
+                İptal
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleteState === "deleting"}
+                style={{
+                  flex: 1, padding: "10px 0", borderRadius: 10,
+                  background: "rgba(248,113,113,0.15)", border: "1px solid rgba(248,113,113,0.6)",
+                  color: "var(--error)", fontFamily: "var(--font-display)",
+                  fontWeight: 600, fontSize: "0.9rem",
+                  cursor: deleteState === "deleting" ? "not-allowed" : "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
+                }}
+              >
+                {deleteState === "deleting" && (
+                  <span style={{ width: 14, height: 14, border: "2px solid rgba(248,113,113,0.3)", borderTop: "2px solid var(--error)", borderRadius: "50%", animation: "spin-slow 0.7s linear infinite" }} />
+                )}
+                {deleteState === "deleting" ? "Siliniyor…" : "Evet, Sil"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Top bar */}
       <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 24px", flexShrink: 0 }}>
         <span style={{ fontFamily: "var(--font-body)", fontSize: "0.85rem", color: "var(--text-muted)" }}>
@@ -80,8 +161,11 @@ function Lightbox({ photos, initialIndex, onClose, onRemove }: {
         <a href={photo.drive_url} target="_blank" rel="noopener noreferrer" style={{ padding: "5px 14px", borderRadius: 7, background: cfg.color, color: "white", textDecoration: "none", fontFamily: "var(--font-body)", fontSize: "0.8rem", fontWeight: 600 }}>
           {cfg.label.replace("Google ", "G.")}&apos;da Aç
         </a>
-        <button onClick={() => onRemove(photo)} style={{ padding: "5px 14px", borderRadius: 7, background: "rgba(248,113,113,0.15)", border: "1px solid rgba(248,113,113,0.3)", color: "var(--error)", fontFamily: "var(--font-body)", fontSize: "0.8rem", cursor: "pointer" }}>
+        <button onClick={() => onRemove(photo)} style={{ padding: "5px 14px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text-muted)", fontFamily: "var(--font-body)", fontSize: "0.8rem", cursor: "pointer" }}>
           Çıkar
+        </button>
+        <button onClick={() => setDeleteState("confirm")} style={{ padding: "5px 14px", borderRadius: 7, background: "transparent", border: "1px solid rgba(248,113,113,0.4)", color: "var(--error)", fontFamily: "var(--font-body)", fontSize: "0.8rem", cursor: "pointer", whiteSpace: "nowrap" }}>
+          Buluttan Sil
         </button>
       </div>
 
@@ -138,6 +222,13 @@ export default function AlbumDetailPage() {
       else setLightboxIdx((i) => Math.min(i, updated.length - 1));
     } catch {}
     finally { setRemoving(null); }
+  };
+
+  const handleDeleteFromCloud = async (photo: AlbumPhoto) => {
+    if (!album) return;
+    await photoApi.delete(photo.source, photo.file_id);
+    try { await albumApi.removePhoto(album.album_id, photo.source, photo.file_id); } catch {}
+    window.location.reload();
   };
 
   const handleRename = async (e: React.FormEvent) => {
@@ -265,7 +356,7 @@ export default function AlbumDetailPage() {
       </main>
 
       {viewMode === "lightbox" && photos.length > 0 && (
-        <Lightbox photos={photos} initialIndex={lightboxIdx} onClose={() => setViewMode("grid")} onRemove={handleRemove} />
+        <Lightbox photos={photos} initialIndex={lightboxIdx} onClose={() => setViewMode("grid")} onRemove={handleRemove} onDeleteFromCloud={handleDeleteFromCloud} />
       )}
     </div>
   );

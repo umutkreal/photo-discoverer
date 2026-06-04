@@ -6,9 +6,10 @@ Sonraki çalıştırmalarda: sadece değişenleri işle (eklenen/silinen).
 """
 
 from providers.factory import provider_getir
+from providers.pcloud import PCloudAuthError
 from embedding import foto_vektore_cevir
 from qdrant_db import collection_olustur, fotograf_kaydet, toplu_fotograf_sil, file_id_to_point_id
-from token_store import page_token_kaydet, page_token_getir
+from token_store import page_token_kaydet, page_token_getir, sil as token_sil
 from album_store import fotograf_cikar_global as album_fotograf_cikar_global
 
 
@@ -23,6 +24,7 @@ def index_all(qdrant_client, col_name, user_id, all_credentials: dict, limit=500
     total_indexed = 0
     total_found = 0
     all_errors = []
+    needs_reauth: list[str] = []
 
     for source, creds in all_credentials.items():
         print(f"\n📂 [{source}] indexleme başlıyor...")
@@ -30,6 +32,12 @@ def index_all(qdrant_client, col_name, user_id, all_credentials: dict, limit=500
 
         try:
             fotolar = provider.fotograflari_listele(klasor_id=folder_id, limit=limit)
+        except PCloudAuthError as e:
+            token_sil(user_id, source)
+            needs_reauth.append(source)
+            all_errors.append({"source": source, "error": str(e), "auth_required": True})
+            print(f"  ❌ [{source}] kimlik doğrulama hatası, token silindi: {e}")
+            continue
         except Exception as e:
             all_errors.append({"source": source, "error": f"Liste alınamadı: {e}"})
             print(f"  ❌ [{source}] liste hatası: {e}")
@@ -79,9 +87,10 @@ def index_all(qdrant_client, col_name, user_id, all_credentials: dict, limit=500
             print(f"  ⚠️ [{source}] başlangıç token alınamadı: {e}")
 
     return {
-        "indexed":     total_indexed,
-        "total_found": total_found,
-        "errors":      all_errors if all_errors else None,
+        "indexed":      total_indexed,
+        "total_found":  total_found,
+        "errors":       all_errors if all_errors else None,
+        "needs_reauth": needs_reauth if needs_reauth else None,
     }
 
 
@@ -93,6 +102,7 @@ def delta_sync(qdrant_client, col_name, user_id, all_credentials: dict):
     added = 0
     deleted = 0
     all_errors = []
+    needs_reauth: list[str] = []
     herhangi_token_var = False
 
     for source, creds in all_credentials.items():
@@ -107,6 +117,12 @@ def delta_sync(qdrant_client, col_name, user_id, all_credentials: dict):
 
         try:
             eklenenler, silinenler, yeni_token = provider.degisiklikleri_getir(saved_token)
+        except PCloudAuthError as e:
+            token_sil(user_id, source)
+            needs_reauth.append(source)
+            all_errors.append({"source": source, "error": str(e), "auth_required": True})
+            print(f"  ❌ [{source}] kimlik doğrulama hatası, token silindi: {e}")
+            continue
         except Exception as e:
             all_errors.append({"source": source, "error": f"Değişiklik alınamadı: {e}"})
             print(f"  ❌ [{source}] değişiklik hatası: {e}")
@@ -168,7 +184,8 @@ def delta_sync(qdrant_client, col_name, user_id, all_credentials: dict):
         return None
 
     return {
-        "added":   added,
-        "deleted": deleted,
-        "errors":  all_errors if all_errors else None,
+        "added":        added,
+        "deleted":      deleted,
+        "errors":       all_errors if all_errors else None,
+        "needs_reauth": needs_reauth if needs_reauth else None,
     }
