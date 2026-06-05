@@ -75,7 +75,7 @@ Provider-agnostik thumbnail proxy. `file_id` ve `source` parametresi alır, ilgi
 
 ### Bileşenler
 
-**Arama çubuğu:** Metin girişi + kaynak filtre pill'leri (Tümü, Google Drive, Dropbox, OneDrive). Form submit'te `searchApi.search()` çağrılır.
+**Arama çubuğu:** Metin girişi + kaynak filtre pill'leri (Tümü, Google Drive, Dropbox, pCloud, OneDrive). Form submit'te `searchApi.search()` çağrılır.
 
 **Filtre paneli (açılır):**
 - Yıl aralığı (year_from, year_to)
@@ -97,9 +97,9 @@ Provider-agnostik thumbnail proxy. `file_id` ve `source` parametresi alır, ilgi
 - Butonlar: Sürücüde Aç, AI Düzenle, Kapat
 - Bilgiler: dosya boyutu, kamera, tarih, konum
 
-**Sync Uyarı Toast:**
+**Sync Uyarı Toast (`SyncWarningToast`):**
 - `localStorage.last_sync_warning` varsa gösterilir
-- Dashboard'daki sync hataları buraya aktarılır
+- `/account` sayfasındaki sync hataları buraya aktarılır
 
 ---
 

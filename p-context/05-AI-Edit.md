@@ -120,7 +120,9 @@ Before/after karşılaştırma görüntüleyicisi.
 - `dispW/dispH`: konteyner boyutu — result büyükse genişler, küçükse before boyutunu korur
 - Karşılaştırma slider'ı: mouse/touch drag ile % pozisyon; clip-path ile before/after bölünmesi
 - Before image: result daha büyükse `objectFit: contain` (orijinal boyutta ortalanmış, kenarlar siyah)
-- Progress overlay: generate sırasında blur + tarama animasyonu
+- **`beforeFullImage` state:** Edit tamamlandığında `gorsel_b64` response alanı before görseli tam çözünürlüklü olarak günceller. İlk yüklemede cloud thumbnail kullanılır; sonuç geldikten sonra full resolution before görüntüsü gösterilir.
+- **Slider sıfırlama:** Yeni `resultImage` set edildiğinde `useEffect` tetiklenir ve `setPos(0)` çağrılır. Slider her yeni sonuçta soldan (0%) başlar.
+- **`isGenerating` durumu:** Tam görsel gösterilir (önceki sonuç veya orijinal), üstüne `backdrop-filter: blur` + tarama animasyonu overlay eklenir. Maske çizim alanı ve diğer UI elemanları gizlenir. Progress overlay: generate sırasında blur + tarama animasyonu.
 
 **`MaskCanvasModal`** (Inpainting için)
 - Canvas araçları: Fırça, Silgi, Dikdörtgen, Daire
@@ -135,7 +137,7 @@ Before/after karşılaştırma görüntüleyicisi.
 - Yerel sekme: drag-drop + dosya input, base64 preview
 - Seçim: `PickedImage { source, file_id, previewUrl, b64 }`
 
-**`AIEditPanel`** (sağ sidebar, 420px)
+**`AIEditPanel`** (sağ sidebar, **460px**)
 - İşlem seçici dropdown (7 işlem, renk kodlamalı)
 - Dinamik parametre alanları:
   - Prompt textarea (500 karakter limiti) — inpainting, outpainting, stil transfer, text edit
@@ -165,10 +167,15 @@ Before/after karşılaştırma görüntüleyicisi.
 
 ### Generate Akışı
 1. `handleGenerate()` tetiklenir
-2. `resultImage` sıfırlanır → `resultDims` sıfırlanır
-3. `editApi.edit(NewEditRequest)` → `POST /edit`
-4. Yanıt: `data:mime;base64,...` URL olarak set edilir
-5. `handleResultLoad` ile result boyutu hesaplanır, konteyner güncellenir
+2. `isGenerating = true` → tam görsel gösterilir + blur overlay aktifleşir
+3. `resultImage` sıfırlanır → `resultDims` sıfırlanır
+4. `editApi.edit(NewEditRequest)` → `POST /edit`
+5. Yanıt: `{ sonuc_b64, gorsel_b64, ... }`
+   - `sonuc_b64` → `resultImage` (sonuç görüntüsü, `data:mime;base64,...`)
+   - `gorsel_b64` → `beforeFullImage` (tam çözünürlüklü orijinal)
+6. `useEffect([resultImage])` → `setPos(0)` — slider sıfırlanır
+7. `handleResultLoad` ile result boyutu hesaplanır, konteyner güncellenir
+8. `isGenerating = false` → overlay kalkar, slider aktifleşir
 
 ---
 

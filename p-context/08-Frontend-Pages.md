@@ -7,13 +7,13 @@ Next.js 15 App Router kullanılır. Tüm sayfalar `src/app/` dizinindedir. Korum
 
 ## `frontend/src/app/layout.tsx` — Kök Layout
 - Tüm uygulama için HTML wrapper
-- Google Fonts yüklenir: **Syne** (başlıklar), **DM Sans** (gövde), **JetBrains Mono** (mono)
+- Google Fonts: yalnızca **Epilogue** — `var(--font-epilogue)`. Başka font yoktur (Syne, DM Sans, JetBrains Mono kullanılmaz).
 - CSS değişkenleri `<html>` elementine atanır
-- Meta: "PhotoMind — Cross-Cloud Image Manager"
+- Meta: `"PhotoMind — Cross-Cloud Image Manager"`
 
 ## `frontend/src/app/globals.css` — Global Stiller
 - Dark theme CSS değişkenleri: `--bg`, `--surface`, `--border`, `--accent` (#7c6dfa)
-- Text değişkenleri: `--text`, `--dim`, `--dimmer`
+- Text değişkenleri: `--text`, `--text-muted`, `--dimmer`
 - Custom scrollbar (accent renk hover'da)
 - Noise overlay efekti (görsel doku)
 - Animasyonlar: `fadeIn`, `pulse-glow`, `spin-slow`, `toast-in`
@@ -24,22 +24,24 @@ Next.js 15 App Router kullanılır. Tüm sayfalar `src/app/` dizinindedir. Korum
 ## Sayfa Dizini
 
 ### `app/page.tsx` — Ana Sayfa / Giriş
-- Giriş yapılmışsa `/dashboard`'a yönlendirir
+- Giriş yapılmışsa `/account`'a yönlendirir (`router.replace("/account")`)
 - "PhotoMind" markası + Google giriş butonu
-- `authApi.login()` → auth_url'e redirect
+- `authApi.login()` → `{ auth_url }` → `window.location.href = auth_url`
 - Giriş hatası inline gösterilir
 
 ### `app/auth/callback/page.tsx` — OAuth Callback
 - URL'den `access_token, name, email, picture` parametrelerini okur
-- localStorage'a JWT ve user bilgisini yazar
-- `/dashboard`'a yönlendirir
-- Hata durumunda: REDIRECT_URI güncelleme talimatı gösterir
+- `localStorage.setItem("access_token", access_token)`
+- `localStorage.setItem("user", JSON.stringify({ email, name, picture }))`
+- `/account`'a yönlendirir (`router.replace("/account")`)
+- Bu parametreler backend'deki `RedirectResponse`'tan gelir (GET `/auth/callback` → frontend `/auth/callback?...`)
 
-### `app/dashboard/page.tsx` — Kontrol Paneli
-- Hızlı arama kısayolu
-- Tam indeksleme formu (folder ID + limit)
-- Delta senkronizasyon butonu
-- Her ikisi de durum kartları gösterir (yükleniyor / başarı / hata)
+### `app/account/page.tsx` — Hesabım (Profil + Entegrasyonlar + İndeksleme)
+- Tek sayfa: profil bilgileri, bulut hesap bağlama, indeksleme ve senkronizasyon
+- **OAuth callback işleme:** `searchParams.get("connected")` → başarı toast'u; `searchParams.get("error")` → hata mesajı (entegrasyon callback'leri buraya yönlendirir)
+- Bölümler: Profil kartı | Bulut Hesapları (4 provider) | İndeksleme başlat | Senkronizasyon
+- `indexApi.start({ limit })` → tam indeksleme, `syncApi.run()` → delta sync
+- Hesap silme: onay metni `DELETE {email}` ile doğrulama gerektirir
 
 ### `app/search/page.tsx` — Fotoğraf Arama
 Bkz. `02-Search.md` — detaylı açıklama orada.
@@ -56,8 +58,12 @@ Bkz. `06-Albums.md` — detaylı açıklama orada.
 ### `app/duplicates/page.tsx` — Yinelenenler
 Bkz. `07-Duplicates.md` — detaylı açıklama orada.
 
-### `app/settings/integrations/page.tsx` — Entegrasyonlar
-Bkz. `01-Auth.md` — detaylı açıklama orada.
+### `app/help/page.tsx` — Yardım
+- Auth gerektirmez (Sidebar var ama giriş kontrolü yapılmaz)
+- Statik içerik, `SECTIONS` array'i ile render edilir:
+  - Arama, AI Düzenle (ops grid — 7 işlem, 2 sütun), Albümler, Yinelenenler, Hesabım
+- "Hızlı Başlangıç" bölümü: 4 adımlı onboarding rehberi
+- Sidebar'dan "Yardım al" menü öğesi ile erişilir
 
 ---
 
@@ -65,11 +71,19 @@ Bkz. `01-Auth.md` — detaylı açıklama orada.
 
 **Koruma:** Her korumalı sayfa:
 ```typescript
-const { user, loading } = useAuth();
-if (!loading && !user) router.push("/");
+const { user } = useAuth();
+if (!user) router.push("/");
 ```
 
-**Layout düzeni:** `Sidebar` (solda sabit) + ana içerik alanı (sağda)
+**Layout düzeni:**
+```jsx
+<div style={{ display: "flex", minHeight: "100vh" }}>
+  <Sidebar />
+  <main style={{ flex: 1, marginLeft: "var(--sidebar-w)", transition: "margin-left 0.2s ease", minWidth: 0 }}>
+    {/* içerik */}
+  </main>
+</div>
+```
 
 **Inline CSS:** Tüm sayfalar `style={{}}` objesi kullanır, Tailwind minimal
 
@@ -84,13 +98,17 @@ if (!loading && !user) router.push("/");
 ## Rota Haritası
 
 ```
-/                     → Giriş
-/auth/callback        → OAuth geri dönüş
-/dashboard            → İndeks + senkronizasyon
+/                     → Giriş (giriş yapılmışsa /account'a yönlendirir)
+/auth/callback        → OAuth geri dönüş (JWT'yi localStorage'a yazar, /account'a yönlendirir)
+/account              → Profil + bulut entegrasyonlar + indeksleme + sync
 /search               → Fotoğraf arama
 /edit                 → AI görüntü düzenleme
 /albums               → Albüm listesi
 /albums/[id]          → Albüm detayı
 /duplicates           → Yinelenen tespit
-/settings/integrations → Bulut hesap yönetimi
+/help                 → Yardım (statik, auth gereksiz)
 ```
+
+**Var olmayan rotalar (eski referanslar):**
+- `/dashboard` — mevcut değil
+- `/settings/integrations` — mevcut değil

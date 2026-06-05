@@ -58,22 +58,22 @@ Body: `{ folder_id?: string, limit: int = 500 }`
 
 ---
 
-## Frontend — `frontend/src/app/dashboard/page.tsx`
+## Frontend — `frontend/src/app/account/page.tsx`
+
+İndeksleme ve senkronizasyon işlemleri `/account` sayfasında yer alır (eski `/dashboard` yolu artık mevcut değildir).
 
 ### Bölümler
 
-**Hızlı Arama Butonu:** `/search` sayfasına yönlendirir.
-
 **Tam İndeksleme:**
-- Google Drive folder ID (opsiyonel) ve limit (varsayılan 500) girdileri
-- `indexApi.start()` → `POST /index`
+- Limit (varsayılan 500) girdi alanı
+- `indexApi.start({ limit })` → `POST /index`
 - Sonuç kartı: indekslenen / bulunan / hatalar
 
 **Delta Senkronizasyon:**
 - Tek "Senkronize Et" butonu
 - `syncApi.run()` → `POST /sync`
 - Sonuç: eklenen / silinen sayıları
-- Sync hataları `localStorage.last_sync_warning`'a kaydedilir, Search sayfasında gösterilir
+- Sync hataları `localStorage.last_sync_warning`'a kaydedilir, Search sayfasında toast olarak gösterilir
 
 ---
 

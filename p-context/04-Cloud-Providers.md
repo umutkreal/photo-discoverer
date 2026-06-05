@@ -71,10 +71,11 @@ Her provider'ın implement etmesi gereken 6 metot:
 - **Silme:** `DELETE /me/drive/items/{file_id}`
 - **EXIF:** `photo.takenDateTime`, `location.latitude/longitude`
 - **cTag sorunu:** Yukarı bakınız (03-Sync.md)
-- **Durum:** ✅ Çalışır (token refresh yok → expire = 401)
+- **Token Yenileme:** Manuel — `token_refresh.py:onedrive_token_yenile()`. 401 alındığında `sync.py` ve thumbnail endpoint'i otomatik refresh dener.
+- **Durum:** ✅ Çalışır
 
 ### `backend/providers/pcloud.py` — pCloud
-**API:** pCloud REST (Bearer yerine `access_token` query param)
+**API:** pCloud REST, Bearer token header ile kimlik doğrulama
 
 - **Listeleme:** `GET /listfolder?folderid=0&recursive=1` → recursive tree walk
 - **İndirme:** `GET /getfilelink?fileid=...` → CDN URL → download
@@ -107,6 +108,6 @@ def provider_getir(source: str, credentials) → BaseProvider
 |---------|--------|---------|----------|--------|
 | EXIF | ✅ | ❌ | Kısmi | ❌ |
 | Delta sync | ✅ | ✅ | ✅ | ✅ |
-| Token refresh | ✅ Otomatik | ✅ SDK | ❌ Manuel | ❌ |
+| Token refresh | ✅ Otomatik | ✅ SDK | ✅ Manuel (token_refresh.py) | ❌ |
 | Yükleme | ✅ | ✅ | ✅ | ✅ |
 | Durum | ✅ | ✅ | ✅ | ⏳ |

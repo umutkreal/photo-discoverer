@@ -12,26 +12,39 @@ Uygulamanın ana navigasyon çubuğu (sol taraf, sabit).
 
 **Export'lar:**
 - `default Sidebar` — bileşen
-- `SIDEBAR_WIDTH = 240` — genişletilmiş genişlik (px)
-- `SIDEBAR_COLLAPSED_WIDTH = 64` — daraltılmış genişlik (px)
+- `SIDEBAR_WIDTH = 288` — genişletilmiş genişlik (px)
+- `SIDEBAR_COLLAPSED_WIDTH = 77` — daraltılmış genişlik (px)
+
+**Nav Öğeleri (4 adet):**
+
+| Etiket | Yol |
+|--------|-----|
+| Ara | `/search` |
+| AI Düzenle | `/edit` |
+| Albümler | `/albums` |
+| Yinelenenler | `/duplicates` |
+
+**Menü Öğeleri** (hesap butonuna tıklanınca açılan dropdown):
+
+| Etiket | Yol / Aksiyon |
+|--------|---------------|
+| Hesabım | `/account` |
+| Yardım al | `/help` |
+| — (divider) | — |
+| Çıkış yap | `logout()` (kırmızı, danger) |
 
 **Özellikler:**
-- Daraltılabilir sidebar; durum localStorage'da kalıcı
-- CSS değişkeni `--sidebar-w` güncellenir → diğer sayfalar buna göre layout yapar
-- 6 navigasyon öğesi (ikona + etikete sahip):
-  - Panel, Ara, AI Düzenle, Albümler, Yinelenenler, Entegrasyonlar
+- Daraltılabilir sidebar; durum `localStorage["sidebar-collapsed"]` (`"0"` veya `"1"`) ile kalıcı
+- CSS değişkeni `--sidebar-w` her toggle'da güncellenir → diğer sayfalar `margin-left: var(--sidebar-w)` ile layout yapar
+- Geçiş animasyonu: `transition: "width 0.2s ease"` (sidebar) + `transition: "margin-left 0.2s ease"` (sayfa içeriği)
 - Aktif sayfa tespiti: `usePathname()` ile
-- Alt hesap dropdown'u: kullanıcı avatarı (resim veya baş harfler), email, Entegrasyonlar/Ayarlar/Yardım/Çıkış seçenekleri
+- Alt hesap butonu: kullanıcı avatarı (Google fotoğrafı veya baş harf fallback) + isim + email + yukarı ok
 - Hover efektleri, yumuşak geçişler
 - Tüm ikonlar inline SVG
 
-### `Navbar.tsx`
-Üst navigasyon çubuğu. Sidebar'a geçildiğinden beri kullanılmıyor.
+**Hydration notu:** `collapsed` state client'ta `useEffect` içinde localStorage'dan yüklenir. İlk SSR render'ında sidebar genişletilmiş görünür (cumulative layout shift riski).
 
-**Özellikler:**
-- 64px yükseklik, blur backdrop, sabit üst
-- Logo + 5 nav linki + kullanıcı bilgisi + çıkış butonu
-- Aktif link altı çizgisi, küçük ekranda kullanıcı bilgisi gizlenir
+**Navbar.tsx yok:** Eski dokümantasyon `Navbar.tsx`'ten bahseder. Bu bileşen artık mevcut değildir; yerine `Sidebar.tsx` kullanılır.
 
 ---
 
@@ -47,18 +60,21 @@ Uygulama genelinde kimlik doğrulama state yönetimi.
 
 **Hook döndürdükleri:**
 ```typescript
-{ user: User | null, loading: boolean, logout: () => void, setUser: (u) => void }
+{ user: User | null, logout: () => void }
 ```
 
 **Davranış:**
-- Mount'ta: localStorage'dan `user` (JSON) okur, `loading: false` set eder
+- Mount'ta: localStorage'dan `user` (JSON) okur
 - `logout()`: `access_token` + `user` localStorage'dan silinir, `"/"` adresine yönlendirir
-- `setUser()`: Auth callback sonrası user state'i günceller
+- Server validation yapılmaz — sadece localStorage'dan okunur
+- JWT expire kontrolü yoktur; token expire olduğunda backend 401 döner
 
 **Kullanım pattern'i:**
 ```typescript
-const { user, loading } = useAuth();
-if (!loading && !user) { router.push("/"); return null; }
+const { user } = useAuth();
+useEffect(() => {
+  if (!user) router.push("/");
+}, [user]);
 ```
 
 ---
@@ -94,8 +110,11 @@ BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
 **`authApi`**
 - `login()` → `GET /auth/login` → `{ auth_url }`
-- `me()` → `GET /auth/me`
-- `dropboxLogin()`, `pcloudLogin()`, `onedriveLogin()` → ilgili login URL'leri
+
+**`userApi`**
+- `me()` → `GET /users/me`
+- `update(data)` → `PATCH /users/me`
+- `delete(confirmText)` → `DELETE /users/me`
 
 **`indexApi`**
 - `start({ folder_id?, limit })` → `POST /index`
@@ -108,13 +127,15 @@ BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 - `stats()` → `GET /stats`
 
 **`integrationApi`**
-- `status()` → `GET /integrations`
-- `revoke(source)` → `DELETE /integrations/{source}`
+- `list()` → `GET /integrations`
+- `disconnect(source)` → `DELETE /integrations/{source}`
 
 **`photoApi`**
 - `delete(source, file_id)` → `DELETE /photos/{source}/{file_id}`
-- `duplicates(threshold, limit)` → `GET /photos/duplicates`
-- `resolve(keep, del)` → `POST /photos/duplicates/resolve`
+
+**`duplicatesApi`**
+- `find({ threshold, limit })` → `GET /photos/duplicates`
+- `resolve({ keep, delete })` → `POST /photos/duplicates/resolve`
 
 **`albumApi`**
 - `list()` → `GET /albums`
@@ -123,14 +144,23 @@ BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 - `rename(id, name)` → `PATCH /albums/{id}`
 - `delete(id)` → `DELETE /albums/{id}`
 - `addPhoto(album_id, photo)` → `POST /albums/{id}/photos`
-- `removePhoto(album_id, source, file_id)` → `DELETE /albums/{id}/photos?source=X&file_id=Y` (query params)
+- `removePhoto(album_id, source, file_id)` → `DELETE /albums/{id}/photos?source=X&file_id=Y`
 
 **`editApi`**
+- `providers()` → `GET /edit/providers`
 - `edit(body: NewEditRequest)` → `POST /edit`
 - `saveOnCloud(body)` → `POST /saveOnCloud`
 
 **Yardımcı:**
-- `thumbnailUrl(file_id, source)` → `GET /thumbnail?file_id=...&source=...` URL'i üretir
+- `thumbnailUrl(file_id, source, token)` → `GET /thumbnail?file_id=...&source=...&token=...` URL'i üretir (JWT query param olarak geçirilir — `<img src>` uyumluluğu için)
 
-**`SOURCE_CONFIG`**
-Her `SourceKey` için `{ label, color, bg }` bilgisi — UI'da kaynak rozetleri için kullanılır.
+### SOURCE_CONFIG
+
+Her `SourceKey` için UI renk ve etiket bilgisi:
+
+| Source | Label | srcBg | Light |
+|--------|-------|-------|-------|
+| `gdrive` | Google Drive | `#F5F5DC` (krem) | true (koyu metin) |
+| `dropbox` | Dropbox | `#0049C2` (koyu mavi) | false (beyaz metin) |
+| `pcloud` | pCloud | `#20BFFF` (açık mavi) | true (koyu metin) |
+| `onedrive` | OneDrive | `#3A3A3A` (koyu gri) | false (beyaz metin) |
