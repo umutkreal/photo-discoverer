@@ -221,7 +221,11 @@ function CompareCanvas({
   }, []);
 
   useEffect(() => {
-    if (!resultImage) setResultDims(null);
+    if (!resultImage) {
+      setResultDims(null);
+    } else {
+      setPos(0);
+    }
   }, [resultImage]);
 
   // Always-on listeners — use dragRef so there's no frame-delay timing gap
@@ -326,7 +330,7 @@ function CompareCanvas({
             />
 
             {/* Solid backdrop — prevents before image showing through transparent result (e.g. background_remove PNG) */}
-            {showAfter && (
+            {showAfter && !isGenerating && (
               <div style={{
                 position: "absolute", inset: 0, zIndex: 1,
                 background: "var(--bg)",
@@ -362,8 +366,8 @@ function CompareCanvas({
                 }} />
                 <div style={{
                   position: "absolute", left: 0, right: 0, height: 64,
-                  background: `linear-gradient(180deg, transparent 0%, ${oc(op)} 50%, transparent 100%)`,
-                  opacity: 0.45, filter: "blur(4px)", mixBlendMode: "screen",
+                  background: "linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.75) 50%, transparent 100%)",
+                  filter: "blur(4px)", mixBlendMode: "multiply",
                   animation: "edt-scan 2.2s ease-in-out infinite",
                 }} />
                 <div style={{

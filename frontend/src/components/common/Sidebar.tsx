@@ -90,7 +90,7 @@ type MenuItem =
 
 const MENU: MenuItem[] = [
   { label: "Hesabım",   Icon: IUser,    href: "/account" },
-  { label: "Yardım al", Icon: IHelp,   href: "#" },
+  { label: "Yardım al", Icon: IHelp,   href: "/help" },
   { divider: true },
   { label: "Çıkış yap", Icon: ILogout, action: "logout", danger: true },
 ];
@@ -111,10 +111,11 @@ export default function Sidebar() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
   const [menuOpen,  setMenuOpen]  = useState(false);
-  const [collapsed, setCollapsed] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    return localStorage.getItem("sidebar-collapsed") === "1";
-  });
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    setCollapsed(localStorage.getItem("sidebar-collapsed") === "1");
+  }, []);
   const menuRef = useRef<HTMLDivElement>(null);
   const btnRef  = useRef<HTMLButtonElement>(null);
 
