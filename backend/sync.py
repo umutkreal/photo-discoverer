@@ -210,6 +210,25 @@ def delta_sync(qdrant_client, col_name, user_id, all_credentials: dict):
                     album_fotograf_cikar_global(source, fid)
                 deleted += len(kayip_idler)
                 print(f"  🗑️ [{source}] reconciliation: {len(kayip_idler)} kayıp dosya temizlendi")
+
+            # Ters kontrol: provider'da olup Qdrant'ta olmayan dosyaları yeniden indeksle
+            mevcut_source_idler = {
+                r.payload["file_id"] for r in mevcut_points
+                if r.payload.get("source") == source
+            }
+            eksik_fotolar = [f for f in provider_fotolar if f["id"] not in mevcut_source_idler]
+            if eksik_fotolar:
+                print(f"  🔁 [{source}] {len(eksik_fotolar)} eksik dosya yeniden indeksleniyor...")
+                for foto in eksik_fotolar:
+                    try:
+                        image = provider.foto_indir(foto["id"])
+                        vektor = foto_vektore_cevir(image)
+                        fotograf_kaydet(qdrant_client, col_name, vektor, foto, source)
+                        added += 1
+                        print(f"  ✅ [{source}] Eksik geri yüklendi: {foto.get('name', foto['id'])}")
+                    except Exception as e:
+                        all_errors.append({"source": source, "file": foto.get("name", "?"), "error": str(e)})
+                        print(f"  ❌ [{source}] {foto.get('name', '?')}: {e}")
         except Exception as e:
             print(f"  ⚠️ [{source}] reconciliation hatası: {e}")
 

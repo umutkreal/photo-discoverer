@@ -141,7 +141,7 @@ def callback(code: str, state: str):
 #  Auth — Dropbox
 # ═══════════════════════════════════════════
 
-FRONTEND_INTEGRATIONS = "http://localhost:3000/settings/integrations"
+FRONTEND_INTEGRATIONS = "http://localhost:3000/account"
 
 
 @app.get("/auth/dropbox/login")
