@@ -29,7 +29,7 @@ export default function CallbackPage() {
         "user",
         JSON.stringify({ email, name: name || "", picture: picture || "" })
       );
-      router.push("/dashboard");
+      router.push("/account");
     } else {
       // Eğer backend callback'e girdik ama token yok, kontrol et
       setStatus("error");
