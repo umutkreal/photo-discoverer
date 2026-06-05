@@ -30,7 +30,7 @@ def index_all(qdrant_client, col_name, user_id, all_credentials: dict, limit=500
     all_credentials: {source: credentials} dict — token_store.getir_tum() çıktısı.
     Collection user yaratılırken oluşturulmuştu (eager creation); burada zaten var varsayılır.
     """
-    collection_olustur(qdrant_client, col_name, 512)
+    collection_olustur(qdrant_client, col_name, 768)
 
     total_indexed = 0
     total_found = 0

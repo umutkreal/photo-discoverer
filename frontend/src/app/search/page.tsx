@@ -825,7 +825,7 @@ export default function SearchPage() {
                   borderRadius: "50%", animation: "spin-slow 0.8s linear infinite",
                 }} />
                 <p style={{ color: "var(--text-muted)", fontFamily: "var(--font-body)", fontSize: "0.9rem" }}>
-                  CLIP ile aranıyor...
+                  SigLIP ile aranıyor...
                 </p>
               </div>
             </div>

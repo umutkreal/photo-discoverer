@@ -53,7 +53,7 @@ app.add_middleware(
 qdrant_client = qdrant_baglanti()
 init_db()        # users, albums, album_photos, tokens, page_tokens
 album_db_init()  # no-op — şema init_db() tarafından oluşturuldu
-VECTOR_SIZE = 512
+VECTOR_SIZE = 768
 
 
 def _simdi_utc() -> str:

@@ -30,7 +30,8 @@ Yalnızca son sync'ten bu yana değişen fotoğrafları günceller.
    - `degisiklikleri_getir(saved_token)` → `(eklenen, silinen, yeni_token)`
    - Silinen dosyalar Qdrant'tan toplu silinir
    - Eklenenler için: Qdrant'ta var mı? → varsa atla, yoksa indir+embed
-   - Reconciliation: provider listesi vs Qdrant → kaçan silmeleri temizle
+   - Reconciliation (silme): provider listesi vs Qdrant → delta'nın kaçırdığı silmeleri temizle
+   - Reconciliation (ekleme): provider'da olup Qdrant'ta olmayan dosyaları yeniden indeksle (indeksleme sırasında hata alan dosyalar burda yakalanır)
    - Yeni token'ı kaydet
 3. Döner: `{added, deleted, errors}` (hiç token yoksa `None`)
 
@@ -50,6 +51,12 @@ OneDrive'da `/content` endpoint'i cTag'ı günceller. Bu delta raporunda sahte "
 Body: `{ folder_id?: string, limit: int = 500 }`
 - Tüm bağlı provider'lar üzerinde `index_all()` çalıştırır
 - Döner: `{indexed, total_found, errors}`
+
+**`DELETE /index`**
+- `collection_temizle()` → tüm Qdrant point'leri siler, collection korunur
+- 4 provider için `page_token_sil()` → delta sync geçmişi sıfırlanır
+- Döner: `{ message, deleted_points, collection }`
+- Frontend: `/account` sayfasındaki "İndeksi Sıfırla" butonu + onay modalı tetikler (`indexApi.clear()`)
 
 **`POST /sync`**
 - `delta_sync()` çalıştırır
@@ -91,5 +98,7 @@ POST /sync (delta)
   ├─ degisiklikleri_getir(T1) → eklenen + silinen
   ├─ Silinen → toplu_fotograf_sil()
   ├─ Eklenen → Qdrant kontrolü → yeniyse embed
+  ├─ Reconciliation (silme): provider vs Qdrant → hayalet sil
+  ├─ Reconciliation (ekleme): provider'da var Qdrant'ta yok → embed + ekle
   └─ Yeni token kaydet
 ```

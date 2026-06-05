@@ -1,7 +1,7 @@
 # Content-Dictionary — PhotoMind Dokümantasyon Rehberi
 
 **PhotoMind:** AI destekli, çok bulutlu fotoğraf yönetim sistemi.  
-**Stack:** FastAPI + Next.js 15 + CLIP + Qdrant + Replicate.com
+**Stack:** FastAPI + Next.js 15 + SigLIP + Qdrant + Replicate.com
 
 ---
 
@@ -10,7 +10,7 @@
 | Dosya | Kapsam | Anahtar Dosyalar |
 |-------|--------|-----------------|
 | [01-Auth.md](01-Auth.md) | Kimlik doğrulama, OAuth akışları, JWT | `auth.py`, `jwt_handler.py`, `token_store.py`, `dependencies.py`, `useAuth.ts`, `account/page.tsx` |
-| [02-Search.md](02-Search.md) | CLIP vektör arama, Qdrant sorguları | `embedding.py`, `qdrant_db.py`, `main.py (/search)`, `search/page.tsx` |
+| [02-Search.md](02-Search.md) | SigLIP vektör arama, Qdrant sorguları | `embedding.py`, `qdrant_db.py`, `main.py (/search)`, `search/page.tsx` |
 | [03-Sync.md](03-Sync.md) | Tam indeksleme ve delta senkronizasyon | `sync.py`, `main.py (/index, /sync)`, `account/page.tsx` |
 | [04-Cloud-Providers.md](04-Cloud-Providers.md) | Bulut sağlayıcı abstraction katmanı | `providers/base.py`, `gdrive.py`, `dropbox.py`, `onedrive.py`, `pcloud.py`, `factory.py` |
 | [05-AI-Edit.md](05-AI-Edit.md) | AI görüntü düzenleme (7 işlem) | `edit_providers/base.py`, `replicate.py`, `edit/page.tsx` |
@@ -38,7 +38,7 @@ Kullanıcı
   │
   └─ FastAPI Backend (port 8000)
        ├─ Google OAuth / cloud OAuth → JWT
-       ├─ CLIP (openai/clip-vit-base-patch32) → 512d vektörler
+       ├─ SigLIP (google/siglip-base-patch16-224) → 768d vektörler
        ├─ Qdrant Cloud → vektör depolama + cosine similarity
        ├─ Cloud Providers → GDrive / Dropbox / OneDrive / pCloud
        ├─ Replicate.com → AI model çalıştırma
@@ -52,9 +52,9 @@ Kullanıcı
 ### Backend
 | Bileşen | Dosya | Ne Yapar |
 |---------|-------|----------|
-| CLIP Wrapper | `embedding.py` | Metin ve görüntüyü 512d vektöre çevirir |
+| SigLIP Wrapper | `embedding.py` | Metin ve görüntüyü 768d vektöre çevirir |
 | Qdrant Ops | `qdrant_db.py` | Vektör kaydetme, arama, silme, duplikat tespiti |
-| Full Indexer | `sync.py:index_all` | Tüm providerları tarar, CLIP ile embed eder |
+| Full Indexer | `sync.py:index_all` | Tüm providerları tarar, SigLIP ile embed eder |
 | Delta Syncer | `sync.py:delta_sync` | Yalnızca değişiklikleri günceller |
 | Provider Factory | `providers/factory.py` | source string → Provider nesnesi |
 | Edit Factory | `edit_providers/factory.py` | provider_adi → EditProvider nesnesi |
@@ -85,10 +85,10 @@ Kullanıcı
 ## Veri Akışları
 
 ### Arama
-`Kullanıcı metni → CLIP → 512d vektör → Qdrant cosine similarity → filtreleme → sayfalama → thumbnail proxy`
+`Kullanıcı metni → SigLIP → 768d vektör → Qdrant cosine similarity → filtreleme → sayfalama → thumbnail proxy`
 
 ### İndeksleme
-`Provider listesi → download → CLIP embed → Qdrant upsert → delta token kaydı (indekslemeden SONRA)`
+`Provider listesi → download → SigLIP embed → Qdrant upsert → delta token kaydı (indekslemeden SONRA)`
 
 ### AI Düzenleme
 `Görüntü (cloud/local) → base64 → Replicate API → model çalışır → base64 sonuç → beforeFullImage güncellenir → slider sıfırlanır (pos=0) → before/after gösterim`

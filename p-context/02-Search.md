@@ -1,19 +1,19 @@
-# 02 — Arama (CLIP + Qdrant)
+# 02 — Arama (SigLIP + Qdrant)
 
 ## Genel Bakış
-Doğal dil ile fotoğraf araması. Kullanıcının yazdığı metin, CLIP modeliyle vektöre çevrilir ve Qdrant'ta cosine similarity ile eşleştirilen fotoğraflar listelenir.
+Doğal dil ile fotoğraf araması. Kullanıcının yazdığı metin, SigLIP modeliyle vektöre çevrilir ve Qdrant'ta cosine similarity ile eşleştirilen fotoğraflar listelenir.
 
 ---
 
 ## Backend
 
 ### `backend/embedding.py`
-CLIP modelini (`openai/clip-vit-base-patch32`) sarmalar. Sunucu başlangıcında yüklenir (~500 MB RAM).
+SigLIP modelini (`google/siglip-base-patch16-224`) sarmalar. Sunucu başlangıcında yüklenir (~350 MB RAM). GPU uyumluysa CUDA, değilse CPU kullanılır (CUDA kernel testi ile otomatik belirlenir).
 
 | Fonksiyon | Giriş | Çıkış |
 |-----------|-------|-------|
-| `foto_vektore_cevir(image: PIL.Image)` | PIL görüntü | 512 boyutlu normalize float listesi |
-| `metin_vektore_cevir(text: str)` | Metin | 512 boyutlu normalize float listesi |
+| `foto_vektore_cevir(image: PIL.Image)` | PIL görüntü | 768 boyutlu normalize float listesi |
+| `metin_vektore_cevir(text: str)` | Metin | 768 boyutlu normalize float listesi |
 
 Her iki çıkış da `F.normalize()` ile normalize edilir; cosine similarity hesabı için hazırdır.
 
@@ -25,7 +25,7 @@ Qdrant Cloud üzerinde vektör depolama ve sorgulama.
 | Fonksiyon | Açıklama |
 |-----------|----------|
 | `qdrant_baglanti()` | Qdrant Cloud'a bağlanır (URL + API key) |
-| `collection_olustur(client, name, 512)` | 512 boyutlu cosine collection oluşturur |
+| `collection_olustur(client, name, 768)` | 768 boyutlu cosine collection oluşturur |
 | `file_id_to_point_id(file_id)` | Deterministic MD5 tabanlı integer ID |
 | `fotograf_kaydet(client, col, vektör, foto, source)` | Vektör + metadata upsert |
 | `fotograf_sil(client, col, file_id)` | Tek fotoğraf silme |
@@ -57,7 +57,7 @@ Qdrant Cloud üzerinde vektör depolama ve sorgulama.
 Parametreler: `q`, `limit`, `offset`, `source`, `year_from`, `year_to`, `camera_make`
 
 Akış:
-1. `metin_vektore_cevir(q)` → 512d vektör
+1. `metin_vektore_cevir(q)` → 768d vektör
 2. Dinamik `fetch_limit` hesapla: EXIF filtresi varsa 500, source filtresi varsa `(limit+offset)*4`, filtresizse `limit+offset`
 3. `qdrant_client.query_points(collection, query_vector, limit=fetch_limit)`
 4. Python tarafında filtre (source / yıl / kamera)
@@ -108,7 +108,7 @@ Provider-agnostik thumbnail proxy. `file_id` ve `source` parametresi alır, ilgi
 ```
 Kullanıcı "sunset" yazar → searchApi.search("sunset")
   → GET /search?q=sunset&limit=12
-  → metin_vektore_cevir("sunset") → 512d vektör
+  → metin_vektore_cevir("sunset") → 768d vektör
   → Qdrant cosine similarity → fetch_limit (dinamik) sonuç
   → Python filtresi + sayfalama → 12 sonuç
   → Frontend grid'de gösterim

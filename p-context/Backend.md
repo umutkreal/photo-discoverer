@@ -5,12 +5,12 @@
 **Çerçeve:** FastAPI (`backend/main.py`)  
 **Veritabanı:** SQLite (`app.db`) — kullanıcılar, tokenlar, albümler  
 **Vektör Deposu:** Qdrant Cloud — her kullanıcı için ayrı collection  
-**Embedding:** CLIP (`openai/clip-vit-base-patch32`) — 512 boyutlu vektörler  
+**Embedding:** SigLIP (`google/siglip-base-patch16-224`) — 768 boyutlu vektörler  
 **AI Düzenleme:** Replicate.com — 6 farklı model  
 **Provider Katmanı:** Abstract `BaseProvider` + factory pattern (GDrive, Dropbox, pCloud, OneDrive)  
 **Port:** `http://localhost:8000` (CORS: `http://localhost:3000` için açık)
 
-Uygulama başlarken `init_db()` tek seferde tüm SQLite tablolarını oluşturur. Qdrant client `qdrant_baglanti()` ile global olarak başlatılır. CLIP modeli `embedding.py` import edildiğinde yüklenir (~500 MB RAM).
+Uygulama başlarken `init_db()` tek seferde tüm SQLite tablolarını oluşturur. Qdrant client `qdrant_baglanti()` ile global olarak başlatılır. SigLIP modeli `embedding.py` import edildiğinde yüklenir (~350 MB RAM).
 
 ---
 
@@ -54,13 +54,14 @@ Uygulama başlarken `init_db()` tek seferde tüm SQLite tablolarını oluşturur
 | Method | Path | Auth | Açıklama |
 |--------|------|------|----------|
 | POST | `/index` | JWT | Tüm providerları sıfırdan indexler. Body: `{ folder_id?, limit: 500 }` |
+| DELETE | `/index` | JWT | Tüm Qdrant point'leri siler, collection korunur. Page token'lar sıfırlanır. |
 | POST | `/sync` | JWT | Delta senkronizasyon. Hiç token yoksa `{ synced: false }` döner |
 
 ### Arama & İstatistikler
 
 | Method | Path | Auth | Açıklama |
 |--------|------|------|----------|
-| GET | `/search` | JWT | CLIP vektör araması. Parametreler: `q, limit, offset, source, year_from, year_to, camera_make` |
+| GET | `/search` | JWT | SigLIP vektör araması. Parametreler: `q, limit, offset, source, year_from, year_to, camera_make` |
 | GET | `/stats` | JWT | EXIF kapsamı: toplam / EXIF'li / GPS'li, kamera markaları |
 
 ### Debug (Geliştirici)
@@ -397,9 +398,9 @@ Her kullanıcı için ayrı collection; user kaydı oluşturulurken eager olarak
 
 ### Vektör Yapılandırması
 
-- **Boyut:** 512
+- **Boyut:** 768
 - **Mesafe:** Cosine
-- **Model:** CLIP `openai/clip-vit-base-patch32`
+- **Model:** SigLIP `google/siglip-base-patch16-224`
 
 ### Point ID Üretimi
 
@@ -464,8 +465,9 @@ EXIF alanları opsiyonel: `None` olan alanlar payload'a dahil edilmez. Qdrant'ta
 2. `degisiklikleri_getir(saved_token)` → `(eklenenler, silinenler, yeni_token)`
 3. Silinenler: `toplu_fotograf_sil()` + `album_fotograf_cikar_global()`
 4. Eklenenler: Qdrant'ta var mı? (`qdrant_client.retrieve()`) → yoksa embed + kaydet
-5. Reconciliation: provider listesi vs Qdrant → delta'nın kaçırdığı silmeleri temizle
-6. `page_token_kaydet(user_id, source, yeni_token)`
+5. Reconciliation (silme): provider listesi vs Qdrant → delta'nın kaçırdığı silmeleri temizle
+6. Reconciliation (ekleme): provider'da olup Qdrant'ta olmayan dosyaları yeniden indeksle (indekslemede hata alan dosyalar burada yakalanır)
+7. `page_token_kaydet(user_id, source, yeni_token)`
 
 Hiçbir provider için token yoksa `None` döner → frontend "önce index yapın" mesajı gösterir.
 
@@ -519,7 +521,7 @@ python-dotenv==1.0.1
 | `dropbox` | Dropbox SDK |
 | `httpx` | Async HTTP (pCloud, OneDrive, Replicate output) |
 | `qdrant-client` | Qdrant Cloud bağlantısı |
-| `transformers`, `torch` | CLIP modeli |
+| `transformers`, `torch`, `sentencepiece` | SigLIP modeli |
 | `Pillow` | Görüntü işleme |
 | `replicate` | AI model çalıştırma |
 | `python-dotenv` | `.env` dosyası |
