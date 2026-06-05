@@ -75,6 +75,8 @@ export default function HesabimPage() {
   }>({ status: "idle" });
 
   const [toast, setToast] = useState<{ type: "success" | "error"; msg: string } | null>(null);
+  const [showClearModal, setShowClearModal] = useState(false);
+  const [clearState, setClearState] = useState<"idle" | "loading" | "error">("idle");
 
   useEffect(() => {
     if (!loading && !user) router.push("/");
@@ -138,6 +140,19 @@ export default function HesabimPage() {
       showToast("error", e instanceof Error ? e.message : "Bir hata oluştu");
     } finally {
       setRevoking(null);
+    }
+  };
+
+  const handleClearIndex = async () => {
+    setClearState("loading");
+    try {
+      const data = await indexApi.clear();
+      setShowClearModal(false);
+      setClearState("idle");
+      showToast("success", `İndeks temizlendi — ${data.deleted_points} kayıt silindi.`);
+    } catch (e: unknown) {
+      setClearState("error");
+      setTimeout(() => setClearState("idle"), 2500);
     }
   };
 
@@ -358,6 +373,21 @@ export default function HesabimPage() {
                   {indexState.msg}
                 </p>
               )}
+              <div style={{ borderTop: "1px solid var(--border)", marginTop: 12, paddingTop: 10 }}>
+                <button
+                  onClick={() => setShowClearModal(true)}
+                  style={{
+                    width: "100%", padding: "7px 0", borderRadius: 8,
+                    background: "transparent", border: "1px solid rgba(213,115,115,0.35)",
+                    color: "var(--error)", fontFamily: "var(--font-body)", fontSize: "0.78rem",
+                    cursor: "pointer", transition: "background 0.15s",
+                  }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(213,115,115,0.08)"; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
+                >
+                  İndeksi Sıfırla
+                </button>
+              </div>
             </div>
 
             {/* Senkronizasyon */}
@@ -401,6 +431,84 @@ export default function HesabimPage() {
         </section>
         </div>
       </main>
+
+      {showClearModal && (
+        <div
+          onClick={() => { if (clearState !== "loading") setShowClearModal(false); }}
+          style={{
+            position: "fixed", inset: 0, zIndex: 200,
+            background: "rgba(0,0,0,0.75)", backdropFilter: "blur(8px)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            padding: 24, animation: "fadeIn 0.2s ease-out",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "var(--surface)", border: "1px solid rgba(213,115,115,0.35)",
+              borderRadius: 20, padding: "32px", maxWidth: 360, width: "100%",
+              textAlign: "center", boxShadow: "0 24px 64px rgba(0,0,0,0.6)",
+            }}
+          >
+            <div style={{
+              width: 52, height: 52, borderRadius: "50%", margin: "0 auto 18px",
+              background: "rgba(213,115,115,0.12)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                <path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"
+                  stroke="var(--error)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            <p style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "1.05rem", color: "var(--text)", marginBottom: 10 }}>
+              İndeksi Sıfırla
+            </p>
+            <p style={{ fontFamily: "var(--font-body)", fontSize: "0.87rem", color: "var(--text-muted)", lineHeight: 1.6, marginBottom: 28 }}>
+              Tüm indexlenmiş veriler silinecek. Bu işlem geri alınamaz. Tekrar aramak için yeniden indexleme yapman gerekecek.
+            </p>
+            {clearState === "error" && (
+              <p style={{ fontFamily: "var(--font-body)", fontSize: "0.78rem", color: "var(--error)", marginBottom: 12 }}>
+                Bir hata oluştu, tekrar dene.
+              </p>
+            )}
+            <div style={{ display: "flex", gap: 10 }}>
+              <button
+                onClick={() => setShowClearModal(false)}
+                disabled={clearState === "loading"}
+                style={{
+                  flex: 1, padding: "11px 0", borderRadius: 11,
+                  background: "var(--surface-2)", border: "1px solid var(--border)",
+                  color: "var(--text-muted)", fontFamily: "var(--font-display)",
+                  fontWeight: 600, fontSize: "0.9rem", cursor: "pointer",
+                }}
+              >
+                İptal
+              </button>
+              <button
+                onClick={handleClearIndex}
+                disabled={clearState === "loading"}
+                style={{
+                  flex: 1, padding: "11px 0", borderRadius: 11,
+                  background: "rgba(213,115,115,0.15)", border: "1px solid rgba(213,115,115,0.5)",
+                  color: "var(--error)", fontFamily: "var(--font-display)",
+                  fontWeight: 600, fontSize: "0.9rem",
+                  cursor: clearState === "loading" ? "not-allowed" : "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                }}
+              >
+                {clearState === "loading" && (
+                  <span style={{
+                    width: 14, height: 14,
+                    border: "2px solid rgba(213,115,115,0.3)", borderTop: "2px solid var(--error)",
+                    borderRadius: "50%", animation: "spin-slow 0.7s linear infinite",
+                  }} />
+                )}
+                {clearState === "loading" ? "Temizleniyor…" : "Evet, Sıfırla"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {toast && (
         <div style={{

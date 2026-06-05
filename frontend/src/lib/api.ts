@@ -51,9 +51,16 @@ export interface IndexResult {
   total_found: number;
   errors: { source?: string; file: string; error: string }[] | null;
 }
+export interface ClearIndexResult {
+  message: string;
+  deleted_points: number;
+  collection: string;
+}
 export const indexApi = {
   start: (body: IndexRequest) =>
     request<IndexResult>("/index", { method: "POST", body: JSON.stringify(body) }),
+  clear: () =>
+    request<ClearIndexResult>("/index", { method: "DELETE" }),
 };
 
 // ─── Sync ───

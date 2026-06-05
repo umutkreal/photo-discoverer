@@ -1,5 +1,5 @@
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
+from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue, FilterSelector
 import os
 import hashlib
 
@@ -194,6 +194,18 @@ def duplikatlari_bul(client, collection_name: str, threshold: float = 0.95, limi
         visited.add(record.id)
 
     return groups
+
+
+def collection_temizle(client: QdrantClient, collection_name: str) -> int:
+    """Collection'daki tüm point'leri siler, collection'ı korur. Silinen sayısını döner."""
+    info = client.get_collection(collection_name)
+    count = info.points_count or 0
+    if count > 0:
+        client.delete(
+            collection_name=collection_name,
+            points_selector=FilterSelector(filter=Filter()),
+        )
+    return count
 
 
 def toplu_fotograf_sil(client, collection_name, file_ids: list[str]):

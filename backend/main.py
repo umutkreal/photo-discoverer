@@ -24,7 +24,7 @@ from token_store import token_store_getir, page_token_sil
 from user_store import User, user_store_getir, init_db
 from dependencies import aktif_kullanici, aktif_kullanici_id, kullanici_tum_credentials
 from embedding import metin_vektore_cevir
-from qdrant_db import qdrant_baglanti, collection_olustur, fotograf_sil, duplikatlari_bul
+from qdrant_db import qdrant_baglanti, collection_olustur, fotograf_sil, duplikatlari_bul, collection_temizle
 from providers.factory import provider_getir
 from edit_providers import edit_provider_getir, desteklenen_providerlar, EditIslemi, EditHatasi
 from sync import index_all, delta_sync
@@ -347,6 +347,24 @@ def hesap_sil(body: dict, user: User = Depends(aktif_kullanici)):
         pass
     user_store_getir().sil(user.user_id)
     return {"deleted": True, "user_id": user.user_id}
+
+
+# ═══════════════════════════════════════════
+#  Index — temizle
+# ═══════════════════════════════════════════
+
+@app.delete("/index")
+def index_sifirla(user: User = Depends(aktif_kullanici)):
+    """Collection'daki tüm point'leri siler. Collection korunur. Page token'lar sıfırlanır."""
+    silinen = collection_temizle(qdrant_client, user.qdrant_collection)
+    store = token_store_getir()
+    for source in VALID_PROVIDERS:
+        store.page_token_sil(user.user_id, source)
+    return {
+        "message": "İndeks temizlendi",
+        "deleted_points": silinen,
+        "collection": user.qdrant_collection,
+    }
 
 
 # ═══════════════════════════════════════════
