@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import Sidebar, { SIDEBAR_WIDTH } from "@/components/common/Sidebar";
-import { editApi, thumbnailUrl, integrationApi, searchApi } from "@/lib/api";
+import { editApi, thumbnailUrl, integrationApi, searchApi, SOURCE_CONFIG } from "@/lib/api";
 import type { SourceKey, IntegrationsResponse, NewEditRequest, PhotoResult } from "@/lib/api";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -65,11 +65,13 @@ function oc(op: Operation | undefined, alpha = 1): string {
 
 function TopBar({
   viewMode, setViewMode, zoom, setZoom, resultImage, filename, hasImage, onChangeImage,
+  onSaveToCloud, isSaving, saveSuccess,
 }: {
   viewMode: ViewMode; setViewMode: (v: ViewMode) => void;
   zoom: number; setZoom: (z: number) => void;
   resultImage: string | null; filename: string;
   hasImage: boolean; onChangeImage: () => void;
+  onSaveToCloud: () => void; isSaving: boolean; saveSuccess: boolean;
 }) {
   const download = () => {
     if (!resultImage) return;
@@ -164,14 +166,23 @@ function TopBar({
           </svg>
         </button>
 
-        <button style={{
-          height: 36, padding: "0 18px", border: 0, borderRadius: 8,
-          background: "linear-gradient(180deg, #8b92a8 0%, #636a7a 40%, #535a68 100%)",
-          color: "#eef0f6", fontFamily: "var(--body)", fontSize: 14, fontWeight: 600,
-          cursor: "pointer",
-          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.15), inset 0 -1px 0 rgba(0,0,0,0.3)",
-        }}>
-          Buluta Kaydet
+        <button
+          onClick={onSaveToCloud}
+          disabled={!resultImage || isSaving}
+          style={{
+            height: 36, padding: "0 18px", border: 0, borderRadius: 8,
+            background: saveSuccess
+              ? "linear-gradient(180deg, #6a9a7a 0%, #4a7a5a 40%, #3d6b50 100%)"
+              : "linear-gradient(180deg, #8b92a8 0%, #636a7a 40%, #535a68 100%)",
+            color: "#eef0f6", fontFamily: "var(--body)", fontSize: 14, fontWeight: 600,
+            cursor: !resultImage || isSaving ? "not-allowed" : "pointer",
+            opacity: !resultImage ? 0.45 : 1,
+            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.15), inset 0 -1px 0 rgba(0,0,0,0.3)",
+            transition: "background 0.25s, opacity 0.15s",
+            minWidth: 130,
+          }}
+        >
+          {isSaving ? "Kaydediliyor…" : saveSuccess ? "✓ Kaydedildi" : "Buluta Kaydet"}
         </button>
       </div>
     </header>
@@ -952,7 +963,7 @@ function ParamMask({ op, imageUrl, maskB64, onOpenCanvas, onClearMask }: {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={`data:image/png;base64,${maskB64}`} alt="mask"
-              style={{ width: "100%", maxHeight: 80, objectFit: "cover", borderRadius: 6, opacity: 0.8, display: "block" }}
+              style={{ width: "100%", objectFit: "contain", borderRadius: 6, opacity: 0.9, display: "block", background: "#000" }}
             />
             <button
               onClick={onClearMask}
@@ -1423,6 +1434,172 @@ const pickerBtnSecondary: React.CSSProperties = {
   cursor: "pointer",
 };
 
+// ─── Cloud Save Modal ─────────────────────────────────────────────────────────
+
+const PROVIDER_ICONS: Record<SourceKey, React.ReactNode> = {
+  gdrive: (
+    <svg width="28" height="28" viewBox="0 0 87.3 78" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M6.6 66.85l3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3L27.5 53H0c0 1.55.4 3.1 1.2 4.5z" fill="#0066da"/>
+      <path d="M43.65 25L29.9 1.2C28.55 2 27.4 3.1 26.6 4.5l-25.4 44A9.06 9.06 0 0 0 0 53h27.5z" fill="#00ac47"/>
+      <path d="M73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5H59.8l5.8 12.35z" fill="#ea4335"/>
+      <path d="M43.65 25L57.4 1.2C56.05.4 54.5 0 52.9 0H34.4c-1.6 0-3.15.45-4.5 1.2z" fill="#00832d"/>
+      <path d="M59.8 53H27.5L13.75 76.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.4 4.5-1.2z" fill="#2684fc"/>
+      <path d="M73.4 26.5l-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3L43.65 25 59.8 53h27.45c0-1.55-.4-3.1-1.2-4.5z" fill="#ffba00"/>
+    </svg>
+  ),
+  dropbox: (
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M6 2L12 6 6 10 0 6z" fill="#0049C2" transform="translate(0 2)"/>
+      <path d="M18 2L24 6 18 10 12 6z" fill="#0049C2" transform="translate(0 2)"/>
+      <path d="M0 14L6 10 12 14 6 18z" fill="#0049C2" transform="translate(0 2)"/>
+      <path d="M12 14L18 10 24 14 18 18z" fill="#0049C2" transform="translate(0 2)"/>
+      <path d="M6 19L12 15 18 19 12 23z" fill="#0049C2" transform="translate(0 2)"/>
+    </svg>
+  ),
+  pcloud: (
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M19.5 9.5a4.5 4.5 0 0 0-4.5-4.5 4.5 4.5 0 0 0-4.24 3A3.5 3.5 0 0 0 7 11.5a3.5 3.5 0 0 0 3.5 3.5h9a3 3 0 0 0 0-5.5z" fill="#20BFFF"/>
+      <rect x="5" y="16" width="14" height="6" rx="1" fill="#20BFFF"/>
+    </svg>
+  ),
+  onedrive: (
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M10.5 8.5C11.3 6.5 13.2 5 15.5 5a5.5 5.5 0 0 1 5.5 5.5c0 .17-.01.34-.02.5A3.5 3.5 0 0 1 24 14.5a3.5 3.5 0 0 1-3.5 3.5H7a4 4 0 0 1-4-4 4 4 0 0 1 4-4c.14 0 .28.01.42.02A5.49 5.49 0 0 1 10.5 8.5z" fill="#0078D4"/>
+    </svg>
+  ),
+};
+
+function CloudSaveModal({
+  integrations,
+  isSaving,
+  defaultFilename,
+  onSave,
+  onClose,
+}: {
+  integrations: IntegrationsResponse | null;
+  isSaving: boolean;
+  defaultFilename: string;
+  onSave: (source: SourceKey, filename: string) => void;
+  onClose: () => void;
+}) {
+  const [saveName, setSaveName] = useState(defaultFilename);
+
+  const connectedProviders = (["gdrive", "dropbox", "pcloud", "onedrive"] as SourceKey[])
+    .filter((src) => integrations?.[src]?.connected === true);
+
+  const cols = connectedProviders.length === 1 ? "1fr" : "1fr 1fr";
+
+  return (
+    <div
+      style={{
+        position: "fixed", inset: 0, zIndex: 400,
+        background: "rgba(4,4,8,0.80)",
+        backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div style={{
+        width: 420, background: "var(--surface)",
+        border: "1px solid var(--border-2)", borderRadius: 18,
+        boxShadow: "0 32px 80px -16px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.04)",
+        overflow: "hidden",
+        animation: "csm-in 0.18s ease-out",
+      }}>
+        <style>{`
+          @keyframes csm-in { from { opacity:0; transform:translateY(-8px) scale(0.97); } to { opacity:1; transform:translateY(0) scale(1); } }
+        `}</style>
+
+        {/* Header */}
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "20px 22px 16px",
+          borderBottom: "1px solid rgba(255,255,255,0.06)",
+        }}>
+          <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text)" }}>
+            Buluta Kaydet
+          </div>
+          <button onClick={onClose} style={{
+            width: 30, height: 30, border: 0, borderRadius: 8,
+            background: "transparent", color: "var(--dimmer)",
+            cursor: "pointer", display: "grid", placeItems: "center",
+            fontSize: 18, lineHeight: 1, transition: "color 0.12s",
+          }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "var(--text)"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "var(--dimmer)"; }}
+          >×</button>
+        </div>
+
+        <div style={{ padding: "16px 22px 22px", display: "flex", flexDirection: "column", gap: 16 }}>
+          {/* Filename input */}
+          <div>
+            <div style={{
+              fontFamily: "var(--mono)", fontSize: 11, fontWeight: 500,
+              letterSpacing: "0.08em", color: "var(--dim)", textTransform: "uppercase", marginBottom: 8,
+            }}>Dosya Adı</div>
+            <input
+              type="text"
+              value={saveName}
+              onChange={(e) => setSaveName(e.target.value)}
+              style={{
+                width: "100%", background: "var(--bg-2)",
+                border: "1px solid var(--border)", borderRadius: 8,
+                padding: "10px 14px", fontFamily: "var(--mono)", fontSize: 13,
+                color: "var(--text)", outline: "none", boxSizing: "border-box",
+              }}
+              onFocus={(e) => { (e.currentTarget as HTMLInputElement).style.borderColor = "rgba(255,255,255,0.25)"; }}
+              onBlur={(e) => { (e.currentTarget as HTMLInputElement).style.borderColor = "var(--border)"; }}
+            />
+          </div>
+
+          {/* Provider grid — only connected */}
+          <div style={{ display: "grid", gridTemplateColumns: cols, gap: 10 }}>
+            {connectedProviders.map((src) => {
+              const cfg = SOURCE_CONFIG[src];
+              return (
+                <button
+                  key={src}
+                  onClick={() => { if (!isSaving && saveName.trim()) onSave(src, saveName.trim()); }}
+                  disabled={isSaving || !saveName.trim()}
+                  style={{
+                    display: "flex", flexDirection: "column", alignItems: "center",
+                    gap: 10, padding: "18px 12px 16px",
+                    border: "1px solid rgba(255,255,255,0.10)",
+                    borderRadius: 14, background: "var(--bg-2)",
+                    cursor: isSaving || !saveName.trim() ? "not-allowed" : "pointer",
+                    transition: "border-color 0.15s, background 0.15s",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (isSaving || !saveName.trim()) return;
+                    const el = e.currentTarget as HTMLButtonElement;
+                    el.style.borderColor = cfg.color + "66";
+                    el.style.background = cfg.bg;
+                  }}
+                  onMouseLeave={(e) => {
+                    const el = e.currentTarget as HTMLButtonElement;
+                    el.style.borderColor = "rgba(255,255,255,0.10)";
+                    el.style.background = "var(--bg-2)";
+                  }}
+                >
+                  <div style={{
+                    width: 48, height: 48, borderRadius: 12,
+                    background: cfg.bg, display: "grid", placeItems: "center",
+                  }}>
+                    {PROVIDER_ICONS[src]}
+                  </div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>
+                    {cfg.label}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function EditPage() {
@@ -1460,6 +1637,11 @@ export default function EditPage() {
   const [integrations, setIntegrations] = useState<IntegrationsResponse | null>(null);
   useEffect(() => { integrationApi.status().then(setIntegrations).catch(() => null); }, []);
 
+  // Cloud save
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [showSaveModal, setShowSaveModal] = useState(false);
+
   // Timer during generation
   useEffect(() => {
     if (!isGenerating) return;
@@ -1478,6 +1660,25 @@ export default function EditPage() {
 
   const beforeUrl = activeImage?.previewUrl ?? null;
   const filename = activeImage?.file_id ?? "photo.jpg";
+
+  const handleSaveToCloud = useCallback(async (source: SourceKey, customFilename: string) => {
+    if (!resultImage || isSaving) return;
+    setShowSaveModal(false);
+
+    const b64 = resultImage.split(",")[1];
+
+    setIsSaving(true);
+    setSaveSuccess(false);
+    try {
+      await editApi.saveOnCloud({ image_b64: b64, filename: customFilename, source });
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Buluta kaydetme başarısız");
+    } finally {
+      setIsSaving(false);
+    }
+  }, [resultImage, isSaving]);
 
   const handleSubmit = useCallback(async () => {
     if (!selectedId || isGenerating) return;
@@ -1555,6 +1756,9 @@ export default function EditPage() {
             resultImage={resultImage} filename={filename}
             hasImage={!!activeImage}
             onChangeImage={() => { setPickedImage(null); setHasResult(false); setResultImage(null); setBeforeFullImage(null); setMaskB64(null); }}
+            onSaveToCloud={() => setShowSaveModal(true)}
+            isSaving={isSaving}
+            saveSuccess={saveSuccess}
           />
           {!activeImage ? (
             <ImagePicker onPick={(img) => { setPickedImage(img); setHasResult(false); setResultImage(null); setBeforeFullImage(null); setMaskB64(null); }} />
@@ -1622,6 +1826,17 @@ export default function EditPage() {
             imageUrl={beforeUrl}
             onClose={() => setMaskOpen(false)}
             onConfirm={(b64) => { setMaskB64(b64); setMaskOpen(false); }}
+          />
+        )}
+
+        {/* Cloud save provider picker */}
+        {showSaveModal && (
+          <CloudSaveModal
+            integrations={integrations}
+            isSaving={isSaving}
+            defaultFilename={`edited_${filename}.${resultImage?.match(/data:image\/(\w+);/)?.[1] === "png" ? "png" : "jpg"}`}
+            onSave={handleSaveToCloud}
+            onClose={() => setShowSaveModal(false)}
           />
         )}
       </div>

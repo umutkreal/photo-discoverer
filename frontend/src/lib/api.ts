@@ -146,6 +146,16 @@ export const integrationApi = {
     request<{ message: string; source: string }>(`/integrations/${source}`, { method: "DELETE" }),
 };
 
+export interface StorageFile {
+  file_id: string;
+  filename: string;
+  size: number;
+}
+export const storageApi = {
+  list: (source: SourceKey, limit = 60) =>
+    request<{ source: SourceKey; files: StorageFile[] }>(`/storage/${source}?limit=${limit}`),
+};
+
 // ─── Photos (delete, duplicates) ───
 export interface DuplicatePhoto {
   file_id: string;

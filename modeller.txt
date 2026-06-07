@@ -1,0 +1,56 @@
+"============================
+AI EDİT MODELLERİ (Replicate)
+============================
+
+1. black-forest-labs/flux-fill-pro
+   - Kullanım: Inpainting, Outpainting
+
+2. black-forest-labs/flux-kontext-pro
+   - Kullanım: Stil Transfer
+
+3. black-forest-labs/flux-kontext-max
+   - Kullanım: Text Edit (metin bazlı düzenleme)
+
+4. flux-kontext-apps/restore-image
+   - Kullanım: Fotoğraf Restore (çizik, hasar onarımı)
+
+5. philz1337x/clarity-pro-upscaler
+   - Kullanım: Upscale (2x / 4x çözünürlük artırma)
+
+6. bria/remove-background
+   - Kullanım: Arka Plan Kaldırma
+
+============================
+EMBEDDING / ARAMA MODELİ
+============================
+
+1. google/siglip-base-patch16-224  (HuggingFace)
+   - Kullanım: Fotoğraf ve metin vektörleştirme (anlamsal arama)
+   - Kütüphane: transformers (SiglipModel + AutoProcessor)
+   - Çıktı: 768 boyutlu vektör
+
+============================
+API'LER
+============================
+
+1. Replicate API
+   - Tüm AI edit işlemleri için
+
+2. HuggingFace Hub
+   - SigLIP modeli indirme / yükleme için
+
+3. Google Drive API (OAuth 2.0)
+   - Fotoğraf listeleme, indirme, yükleme, silme
+
+4. Dropbox API (OAuth 2.0)
+   - Fotoğraf listeleme, indirme, yükleme, silme
+
+5. pCloud API (OAuth 2.0)
+   - Fotoğraf listeleme, indirme, yükleme, silme
+
+6. OneDrive / Microsoft Graph API (OAuth 2.0)
+   - Fotoğraf listeleme, indirme, yükleme, silme
+
+7. Qdrant (Vektör Veritabanı)
+   - Vektör arama, koleksiyon yönetimi, duplikat tespiti
+"

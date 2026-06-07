@@ -620,6 +620,25 @@ def revoke_integration(source: str, user: User = Depends(aktif_kullanici)):
     return {"message": f"{PROVIDER_LABELS[source]} bağlantısı kesildi", "source": source}
 
 
+@app.get("/storage/{source}")
+def list_storage(
+    source: str,
+    limit: int = Query(default=60, ge=1, le=500),
+    user: User = Depends(aktif_kullanici),
+):
+    if source not in VALID_PROVIDERS:
+        raise HTTPException(status_code=400, detail="Geçersiz provider")
+    creds = token_store_getir().getir(user.user_id, source)
+    if not creds:
+        raise HTTPException(status_code=400, detail=f"{PROVIDER_LABELS[source]} hesabı bağlı değil")
+    provider = provider_getir(source, creds)
+    files = provider.fotograflari_listele(limit=limit)
+    return {
+        "source": source,
+        "files": [{"file_id": f["id"], "filename": f["name"], "size": f.get("size", 0)} for f in files],
+    }
+
+
 # ═══════════════════════════════════════════
 #  Photo actions
 # ═══════════════════════════════════════════

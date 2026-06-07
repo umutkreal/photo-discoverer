@@ -3,27 +3,22 @@
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Sidebar from "@/components/common/Sidebar";
-import { integrationApi, authApi, indexApi, syncApi, SOURCE_CONFIG } from "@/lib/api";
+import { integrationApi, authApi, indexApi, syncApi, SOURCE_CONFIG, storageApi, thumbnailUrl } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
-import type { IntegrationsResponse, SourceKey, IndexResult } from "@/lib/api";
+import type { IntegrationsResponse, SourceKey, IndexResult, StorageFile } from "@/lib/api";
 
 // ─── Provider icons ───────────────────────────────────────────
 
 function GDriveIcon({ size = 20 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <path d="M4.5 18.5L8 12.5L2 12.5L4.5 18.5Z" fill="#4285F4"/>
-      <path d="M8 12.5L4.5 18.5H15.5L12 12.5H8Z" fill="#34A853"/>
-      <path d="M12 12.5L15.5 18.5L22 8L18.5 2L12 12.5Z" fill="#FBBC05"/>
-      <path d="M8 12.5H12L18.5 2H5.5L8 12.5Z" fill="#EA4335"/>
-    </svg>
+    <img src="/google-drive-logo.png" width={size} height={size} alt="Google Drive" style={{ objectFit: "contain" }} />
   );
 }
 
 function DropboxIcon({ size = 20 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <path d="M12 6L6 9.5L12 13L6 16.5L12 20L18 16.5L12 13L18 9.5L12 6Z" fill="#0049C2"/>
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="white">
+      <path d="M7 3L2 6.5 7 10 12 6.5zM17 3L12 6.5 17 10 22 6.5zM2 13.5L7 10 12 13.5 7 17zM12 13.5L17 10 22 13.5 17 17zM7 17L12 20.5 17 17 12 13.5z"/>
     </svg>
   );
 }
@@ -31,8 +26,8 @@ function DropboxIcon({ size = 20 }: { size?: number }) {
 function PCloudIcon({ size = 20 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <path d="M5 18C3 18 1.5 16.5 1.5 14.5C1.5 12.8 2.6 11.4 4.2 11C4.1 10.7 4 10.4 4 10C4 7.8 5.8 6 8 6C8.7 6 9.4 6.2 10 6.5C10.9 4.5 13 3 15.5 3C19 3 21.5 5.7 21.5 9C21.5 9.2 21.5 9.4 21.5 9.6C22.4 10.2 23 11.2 23 12.5C23 14.4 21.5 16 19.5 16" stroke="#20BFFF" strokeWidth="1.8" strokeLinecap="round"/>
-      <path d="M12 12V20M9 17L12 20L15 17" stroke="#20BFFF" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M5 18C3 18 1.5 16.5 1.5 14.5C1.5 12.8 2.6 11.4 4.2 11C4.1 10.7 4 10.4 4 10C4 7.8 5.8 6 8 6C8.7 6 9.4 6.2 10 6.5C10.9 4.5 13 3 15.5 3C19 3 21.5 5.7 21.5 9C21.5 9.2 21.5 9.4 21.5 9.6C22.4 10.2 23 11.2 23 12.5C23 14.4 21.5 16 19.5 16" stroke="white" strokeWidth="1.8" strokeLinecap="round"/>
+      <path d="M12 12V20M9 17L12 20L15 17" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   );
 }
@@ -77,6 +72,26 @@ export default function HesabimPage() {
   const [toast, setToast] = useState<{ type: "success" | "error"; msg: string } | null>(null);
   const [showClearModal, setShowClearModal] = useState(false);
   const [clearState, setClearState] = useState<"idle" | "loading" | "error">("idle");
+
+  // Storage browser
+  const [storageSource, setStorageSource] = useState<SourceKey | null>(null);
+  const [storageFiles, setStorageFiles] = useState<StorageFile[]>([]);
+  const [storageLoading, setStorageLoading] = useState(false);
+
+  const openStorage = async (source: SourceKey) => {
+    setStorageSource(source);
+    setStorageFiles([]);
+    setStorageLoading(true);
+    try {
+      const res = await storageApi.list(source, 60);
+      setStorageFiles(res.files);
+    } catch (e: unknown) {
+      showToast("error", e instanceof Error ? e.message : "Depolama yüklenemedi");
+      setStorageSource(null);
+    } finally {
+      setStorageLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (!loading && !user) router.push("/");
@@ -253,7 +268,7 @@ export default function HesabimPage() {
               const textColor   = isLight ? "#000" : "#fff";
               const mutedColor  = isLight ? "rgba(0,0,0,0.55)" : "rgba(255,255,255,0.65)";
               const borderColor = isLight ? "rgba(0,0,0,0.1)" : "rgba(255,255,255,0.12)";
-              const iconBg      = isLight ? "rgba(0,0,0,0.07)" : "rgba(255,255,255,0.15)";
+              const iconBg      = "rgba(0,0,0,0.18)";
               return (
                 <div key={source} style={{
                   display: "flex", alignItems: "center", gap: 14,
@@ -282,6 +297,26 @@ export default function HesabimPage() {
                     }}>
                       Devre Dışı
                     </span>
+                  )}
+
+                  {!disabled && connected && (
+                    <button
+                      onClick={() => openStorage(source)}
+                      title="Depolamayı Görüntüle"
+                      style={{
+                        width: 32, height: 32, borderRadius: 8, border: "1px solid rgba(0,0,0,0.35)",
+                        background: "#1a1a1a",
+                        color: "rgba(255,255,255,0.65)", cursor: "pointer",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        flexShrink: 0, transition: "background 0.12s",
+                      }}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "#2e2e2e"; }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "#1a1a1a"; }}
+                    >
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                      </svg>
+                    </button>
                   )}
 
                   {!disabled && (
@@ -505,6 +540,96 @@ export default function HesabimPage() {
                 )}
                 {clearState === "loading" ? "Temizleniyor…" : "Evet, Sıfırla"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Storage browser modal */}
+      {storageSource && (
+        <div
+          style={{
+            position: "fixed", inset: 0, zIndex: 300,
+            background: "rgba(4,4,8,0.82)", backdropFilter: "blur(8px)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            padding: 24,
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget) setStorageSource(null); }}
+        >
+          <div style={{
+            width: "min(860px, 96vw)", maxHeight: "84vh",
+            background: "var(--surface)", border: "1px solid var(--border)",
+            borderRadius: 18, overflow: "hidden", display: "flex", flexDirection: "column",
+            boxShadow: "0 32px 80px -16px rgba(0,0,0,0.8)",
+          }}>
+            {/* Header */}
+            <div style={{
+              display: "flex", alignItems: "center", gap: 12,
+              padding: "18px 22px", borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0,
+            }}>
+              {(() => { const Icon = PROVIDER_ICONS[storageSource]; return <Icon size={20} />; })()}
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text)" }}>
+                  {SOURCE_CONFIG[storageSource].label} — Depolama
+                </div>
+                <div style={{ fontFamily: "var(--font-body)", fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
+                  {storageLoading ? "Yükleniyor…" : `${storageFiles.length} fotoğraf`}
+                </div>
+              </div>
+              <button
+                onClick={() => setStorageSource(null)}
+                style={{
+                  width: 30, height: 30, border: 0, borderRadius: 8,
+                  background: "transparent", color: "var(--text-muted)",
+                  cursor: "pointer", fontSize: 18, display: "grid", placeItems: "center",
+                }}
+              >×</button>
+            </div>
+
+            {/* Body */}
+            <div style={{ flex: 1, overflowY: "auto", padding: 18 }}>
+              {storageLoading && (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 200 }}>
+                  <div style={{
+                    width: 32, height: 32, borderRadius: "50%",
+                    border: "3px solid var(--border)", borderTop: `3px solid ${SOURCE_CONFIG[storageSource].color}`,
+                    animation: "spin-slow 0.8s linear infinite",
+                  }} />
+                </div>
+              )}
+
+              {!storageLoading && storageFiles.length === 0 && (
+                <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-muted)", fontFamily: "var(--font-body)", fontSize: 14 }}>
+                  Bu hesapta fotoğraf bulunamadı.
+                </div>
+              )}
+
+              {!storageLoading && storageFiles.length > 0 && (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: 8 }}>
+                  <style>{`.stg-thumb:hover .stg-label { opacity: 1 !important; }`}</style>
+                  {storageFiles.map((f) => (
+                    <div key={f.file_id} className="stg-thumb" title={f.filename} style={{ position: "relative", borderRadius: 8, overflow: "hidden", aspectRatio: "1", background: "var(--bg-2)" }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={thumbnailUrl(f.file_id, storageSource)}
+                        alt={f.filename}
+                        style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                        loading="lazy"
+                      />
+                      <div className="stg-label" style={{
+                        position: "absolute", bottom: 0, left: 0, right: 0,
+                        background: "linear-gradient(transparent, rgba(0,0,0,0.8))",
+                        padding: "20px 6px 5px", opacity: 0, transition: "opacity 0.15s",
+                      }}>
+                        <p style={{
+                          fontFamily: "var(--font-body)", fontSize: 10, color: "#fff",
+                          margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                        }}>{f.filename}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
